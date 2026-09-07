@@ -1,14 +1,17 @@
-"""Bot de Telegram para registrar kilos de palta."""
+"""Bot de Telegram para registrar kilos de palta y guardar en Google Sheets."""
 
 from __future__ import annotations
 
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import os
 import sys
+import threading
 from typing import Final
 from zoneinfo import ZoneInfo
 
+import requests
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.error import InvalidToken
 from telegram.ext import (
@@ -20,14 +23,27 @@ from telegram.ext import (
     filters,
 )
 
-# Configuración básica de logs
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-# Constantes y Estados
+# Servidor HTTP dummy para mantener activo Render
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot activo")
+
+    def log_message(self, format, *args):
+        pass
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    server.serve_forever()
+
 TIPO_PALTA, KILOS, USUARIO = range(3)
 TIPOS_PALTA: Final[list[list[str]]] = [["Palta Hass", "Palta La Cruz"]]
 USUARIOS: Final[list[list[str]]] = [
@@ -42,14 +58,12 @@ NEXT_ORDER_BUTTON: Final = "Ingresar siguiente pedido"
 
 
 def _message_text(update: Update) -> str:
-    """Obtiene texto de un mensaje y falla claramente si no existe."""
     if update.message is None or update.message.text is None:
         raise ValueError("El mensaje no contiene texto")
     return update.message.text.strip()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia el registro de una nueva carga."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -64,7 +78,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Guarda el tipo de palta seleccionado."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -82,7 +95,6 @@ async def tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Valida y guarda la cantidad de kilos."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -108,7 +120,6 @@ async def kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Completa el registro y muestra un resumen."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -120,8 +131,23 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     context.user_data["usuario"] = usuario
     registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
+
+    # ENVÍO A GOOGLE SHEETS
+    sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
+    if sheets_url:
+        payload = {
+            "fecha": registered_at,
+            "tipo_palta": context.user_data["tipo_palta"],
+            "kilos": float(context.user_data["kilos"]),
+            "usuario": context.user_data["usuario"],
+        }
+        try:
+            requests.post(sheets_url, json=payload, timeout=5)
+        except Exception as e:
+            logger.error("Error al enviar a Google Sheets: %s", e)
+
     resumen = (
-        "*Registro completado*\n\n"
+        "*Registro completado y guardado en Sheets*\n\n"
         f"• Tipo: {context.user_data['tipo_palta']}\n"
         f"• Kilos: {context.user_data['kilos']}\n"
         f"• Registrado por: {context.user_data['usuario']}\n"
@@ -139,7 +165,6 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancela el registro en curso."""
     context.user_data.clear()
     if update.message is not None:
         await update.message.reply_text(
@@ -150,7 +175,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def build_application(token: str) -> Application:
-    """Construye la aplicación sin arrancar el polling."""
     application = Application.builder().token(token).build()
     conversation = ConversationHandler(
         entry_points=[
@@ -171,53 +195,11 @@ def build_application(token: str) -> Application:
 
 
 def main() -> None:
-    """Valida la variable de entorno y arranca el bot."""
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
-        logger.error("Falta BOT_TOKEN en las variables de entorno de Render.")
+        logger.error("Falta BOT_TOKEN en las variables de entorno.")
         sys.exit(2)
 
-    try:
-        logger.info("Iniciando bot de Telegram...")
-        application = build_application(token)
-        application.run_polling()
-    except InvalidToken:
-        logger.error("Telegram rechazó el BOT_TOKEN. Genera uno nuevo en @BotFather.")
-        sys.exit(2)
-    except KeyboardInterrupt:
-        logger.warning("Bot detenido manualmente.")
-        sys.exit(130)
-    except Exception:
-        logger.exception("Error inesperado al ejecutar el bot.")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-# Servidor HTTP básico para satisfacer el chequeo de salud de Render
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot activo")
-
-    def log_message(self, format, *args):
-        pass # Silenciar logs HTTP repetitivos
-
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), DummyHandler)
-    server.serve_forever()
-
-def main() -> None:
-    token = os.getenv("BOT_TOKEN", "").strip()
-    if not token:
-        logger.error("Falta BOT_TOKEN en las variables de entorno de Render.")
-        sys.exit(2)
-
-    # Iniciar servidor en segundo plano para evitar que Render mate el servicio
     threading.Thread(target=run_dummy_server, daemon=True).start()
 
     try:
@@ -231,3 +213,6 @@ def main() -> None:
         logger.exception("Error inesperado al ejecutar el bot.")
         sys.exit(1)
 
+
+if __name__ == "__main__":
+    main()
