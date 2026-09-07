@@ -193,4 +193,41 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Servidor HTTP básico para satisfacer el chequeo de salud de Render
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot activo")
+
+    def log_message(self, format, *args):
+        pass # Silenciar logs HTTP repetitivos
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    server.serve_forever()
+
+def main() -> None:
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not token:
+        logger.error("Falta BOT_TOKEN en las variables de entorno de Render.")
+        sys.exit(2)
+
+    # Iniciar servidor en segundo plano para evitar que Render mate el servicio
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
+    try:
+        logger.info("Iniciando bot de Telegram...")
+        application = build_application(token)
+        application.run_polling()
+    except InvalidToken:
+        logger.error("Telegram rechazó el BOT_TOKEN.")
+        sys.exit(2)
+    except Exception:
+        logger.exception("Error inesperado al ejecutar el bot.")
+        sys.exit(1)
+
