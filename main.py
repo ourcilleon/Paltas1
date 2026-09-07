@@ -1,18 +1,12 @@
-"""Bot de Telegram para registrar kilos de palta.
-
-La lógica del flujo está separada de la configuración y el proceso de arranque
-para que pueda reutilizarse o reemplazarse por otra interfaz en el futuro.
-"""
+"""Bot de Telegram para registrar kilos de palta."""
 
 from __future__ import annotations
 
-import argparse
 from datetime import datetime
 import logging
 import os
 import sys
-from pathlib import Path
-from typing import Final, Sequence
+from typing import Final
 from zoneinfo import ZoneInfo
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
@@ -26,12 +20,14 @@ from telegram.ext import (
     filters,
 )
 
-from automation.config import Settings
-from automation.errors import ConfigurationError
-from automation.logging_config import configure_logging
-
+# Configuración básica de logs
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
+# Constantes y Estados
 TIPO_PALTA, KILOS, USUARIO = range(3)
 TIPOS_PALTA: Final[list[list[str]]] = [["Palta Hass", "Palta La Cruz"]]
 USUARIOS: Final[list[list[str]]] = [
@@ -174,57 +170,26 @@ def build_application(token: str) -> Application:
     return application
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Bot de Telegram para registrar kilos de palta.")
-    parser.add_argument(
-        "--env-file",
-        type=Path,
-        default=Path(".env"),
-        help="Archivo de variables de entorno (por defecto: .env).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Valida la configuración sin iniciar el bot ni conectarse a Telegram.",
-    )
-    return parser
-
-
-def run(argv: Sequence[str] | None = None) -> int:
-    """Valida configuración y arranca el bot cuando corresponde."""
-    args = build_parser().parse_args(argv)
-    try:
-        settings = Settings.from_env(args.env_file)
-        configure_logging(settings.log_level)
-        token = os.getenv("BOT_TOKEN", "").strip()
-        if not token:
-            raise ConfigurationError("Falta BOT_TOKEN en el entorno o en el archivo .env")
-
-        application = build_application(token)
-        if args.dry_run:
-            logger.info("Configuración válida; no se inició el polling (--dry-run).")
-            print("Configuración válida. El bot no se inició porque se usó --dry-run.")
-            return 0
-
-        logger.info("Iniciando bot de Telegram en entorno %s", settings.app_env)
-        application.run_polling()
-        return 0
-    except (ConfigurationError, ValueError) as exc:
-        logger.error("%s", exc)
-        return 2
-    except InvalidToken:
-        logger.error("Telegram rechazó BOT_TOKEN. Genera un token nuevo en BotFather.")
-        return 2
-    except KeyboardInterrupt:
-        logger.warning("Bot detenido por el usuario")
-        return 130
-    except Exception:
-        logger.exception("Error inesperado al ejecutar el bot")
-        return 1
-
-
 def main() -> None:
-    sys.exit(run())
+    """Valida la variable de entorno y arranca el bot."""
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not token:
+        logger.error("Falta BOT_TOKEN en las variables de entorno de Render.")
+        sys.exit(2)
+
+    try:
+        logger.info("Iniciando bot de Telegram...")
+        application = build_application(token)
+        application.run_polling()
+    except InvalidToken:
+        logger.error("Telegram rechazó el BOT_TOKEN. Genera uno nuevo en @BotFather.")
+        sys.exit(2)
+    except KeyboardInterrupt:
+        logger.warning("Bot detenido manualmente.")
+        sys.exit(130)
+    except Exception:
+        logger.exception("Error inesperado al ejecutar el bot.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
