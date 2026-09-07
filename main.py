@@ -7,7 +7,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import logging
 import os
-import re
 import sys
 import threading
 from typing import Final
@@ -158,24 +157,18 @@ def parsear_y_formatear_numero(texto: str) -> str | None:
     Si es válido, devuelve el número formateado con separadores de miles (.) y coma decimal (,).
     Si no es un número, retorna None.
     """
-    # Eliminar espacios en blanco y puntos de miles existentes
     limpio = texto.replace(" ", "").replace("$", "")
     
-    # Normalizar comas y puntos decimales
     if "," in limpio and "." in limpio:
-        # Ejemplo: 1.250,50 -> elimina punto de miles
         limpio = limpio.replace(".", "").replace(",", ".")
     elif "," in limpio:
-        # Ejemplo: 1250,50 -> convierte coma a punto para float
         limpio = limpio.replace(",", ".")
 
     try:
         val = float(limpio)
-        # Formatear el número con formato español/chileno (puntos para miles, coma para decimales)
         if val.is_integer():
             return f"{int(val):,}".replace(",", ".")
         else:
-            # Mantener decimales si existen
             partes = f"{val:,.2f}".split(".")
             entera = partes[0].replace(",", ".")
             decimal = partes[1]
@@ -280,7 +273,7 @@ async def ent_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data["formato"] = _message_text(update)
     await update.message.reply_text(
-        "3. Ingresa la Cantidad de Entrada:",
+        "3. Ingresa la Cantidad Entrada (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return ENT_CANTIDAD
@@ -290,7 +283,16 @@ async def ent_cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["cantidad"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para la Cantidad Entrada (ej: 50 ó 1200):"
+        )
+        return ENT_CANTIDAD
+
+    context.user_data["cantidad"] = num_formateado
     await update.message.reply_text(
         "4. Selecciona el Calibre:",
         reply_markup=ReplyKeyboardMarkup(
@@ -334,7 +336,7 @@ async def ent_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data["categoria"] = _message_text(update)
     await update.message.reply_text(
-        "7. Ingresa Kilos Brutos:",
+        "7. Ingresa Kilos Brutos (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return ENT_KILOS_BRUTOS
@@ -344,9 +346,18 @@ async def ent_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["kilos_brutos"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos Brutos (ej: 1500 ó 1500.5):"
+        )
+        return ENT_KILOS_BRUTOS
+
+    context.user_data["kilos_brutos"] = num_formateado
     await update.message.reply_text(
-        "8. Ingresa Tara (Kilos):",
+        "8. Ingresa Tara (Kilos) (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return ENT_TARA
@@ -356,7 +367,16 @@ async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["tara"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para Tara (Kilos) (ej: 20 ó 20.5):"
+        )
+        return ENT_TARA
+
+    context.user_data["tara"] = num_formateado
     return await finalizar_y_guardar(update, context)
 
 
@@ -370,7 +390,7 @@ async def sal_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data["formato"] = _message_text(update)
     await update.message.reply_text(
-        "2. Ingresa Kilos que Salieron:",
+        "2. Ingresa Kilos que Salieron (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return SAL_KILOS
@@ -380,9 +400,18 @@ async def sal_kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["kilos_salieron"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos que Salieron (ej: 800 ó 800.5):"
+        )
+        return SAL_KILOS
+
+    context.user_data["kilos_salieron"] = num_formateado
     await update.message.reply_text(
-        "3. Ingresa Cajas Hechas:",
+        "3. Ingresa Cajas Hechas (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return SAL_CAJAS
@@ -392,7 +421,16 @@ async def sal_cajas_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["cajas_hechas"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para Cajas Hechas (ej: 100):"
+        )
+        return SAL_CAJAS
+
+    context.user_data["cajas_hechas"] = num_formateado
     await update.message.reply_text(
         "4. Selecciona el Calibre:",
         reply_markup=ReplyKeyboardMarkup(
@@ -463,7 +501,7 @@ async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAU
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para los Kilos Vendidos (ej: 1500 ó 1500.5):"
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos Vendidos (ej: 1500 ó 1500.5):"
         )
         return VEN_KILOS_VENDIDOS
 
@@ -627,8 +665,8 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"• *Calibre:* {payload['calibre']}\n"
             f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
             f"• *Categoría:* {payload['categoria']}\n"
-            f"• *Kilos Brutos:* {payload['kilos_brutos']}\n"
-            f"• *Tara (Kilos):* {payload['tara']}"
+            f"• *Kilos Brutos:* {payload['kilos_brutos']} Kg\n"
+            f"• *Tara:* {payload['tara']} Kg"
         )
     elif tipo == "Salida":
         resumen = (
@@ -636,7 +674,7 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"• *Fecha:* {registered_at}\n"
             f"• *Origen:* {origen}\n"
             f"• *Formato Salida:* {payload['formato']}\n"
-            f"• *Kilos que Salieron:* {payload['kilos_salieron']}\n"
+            f"• *Kilos que Salieron:* {payload['kilos_salieron']} Kg\n"
             f"• *Cajas Hechas:* {payload['cajas_hechas']}\n"
             f"• *Calibre:* {payload['calibre']}\n"
             f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
