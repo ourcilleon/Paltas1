@@ -24,24 +24,27 @@ from telegram.ext import (
     filters,
 )
 
+# Logging detallado para diagnosticar en Render
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-# Servidor HTTP integrado para que Render detecte el puerto abierto de inmediato
+# Servidor HTTP dummy para satisfacer el puerto de Render
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Bot activo")
+        self.wfile.write(b"Bot de Paltas activo y escuchando")
 
     def log_message(self, format, *args):
         pass
 
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
+    logger.info("Iniciando servidor HTTP en el puerto %s...", port)
     server = HTTPServer(("0.0.0.0", port), DummyHandler)
     server.serve_forever()
 
@@ -68,6 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
+    logger.info("Comando /start recibido de usuario: %s", update.effective_user.id)
     context.user_data.clear()
     await update.message.reply_text(
         "1. Elige el tipo de palta que quieres ingresar:",
@@ -133,7 +137,7 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data["usuario"] = usuario
     registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
 
-    # ENVÍO A GOOGLE SHEETS USANDO LIBRERÍA NATIVA (urllib)
+    # Envío a Google Sheets via Webhook
     sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
     if sheets_url:
         payload = {
@@ -150,6 +154,7 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 headers={"Content-Type": "application/json"},
             )
             urllib.request.urlopen(req, timeout=5)
+            logger.info("Datos enviados con éxito a Google Sheets")
         except Exception as e:
             logger.error("Error al enviar a Google Sheets: %s", e)
 
@@ -204,16 +209,16 @@ def build_application(token: str) -> Application:
 def main() -> None:
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
-        logger.error("Falta BOT_TOKEN en las variables de entorno.")
+        logger.error("Falta BOT_TOKEN en las variables de entorno de Render.")
         sys.exit(2)
 
-    # Inicia servidor web dummy para pasar el chequeo de Render
+    # Iniciar servidor web en segundo plano
     threading.Thread(target=run_dummy_server, daemon=True).start()
 
     try:
-        logger.info("Iniciando bot de Telegram...")
+        logger.info("Iniciando bot de Telegram en modo Polling...")
         application = build_application(token)
-        application.run_polling()
+        application.run_polling(drop_pending_updates=True)
     except InvalidToken:
         logger.error("Telegram rechazó el BOT_TOKEN.")
         sys.exit(2)
