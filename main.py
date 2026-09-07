@@ -66,7 +66,16 @@ def run_dummy_server():
     SAL_CALIBRE,
     SAL_TIPO_PALTA,
     SAL_CATEGORIA,
-) = range(16)
+    # Estados de VENTA
+    VEN_CLIENTE,
+    VEN_KILOS_VENDIDOS,
+    VEN_TIPO_PAGO,
+    VEN_CALIBRE,
+    VEN_TIPO_PALTA,
+    VEN_CATEGORIA,
+    VEN_MONTO_TOTAL,
+    VEN_MONTO_PAGADO,
+) = range(24)
 
 # Teclados y Opciones
 OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
@@ -90,6 +99,16 @@ OPCIONES_FORMATO_SALIDA: Final = [
     ["Bandeja 10Kg"],
     ["Gamela 15Kg"],
     ["Cajas 4Kg"],
+]
+
+# Opciones Flujo Venta
+OPCIONES_TIPO_PAGO: Final = [
+    ["Efectivo"],
+    ["Cheque"],
+    ["Transferencia"],
+    ["Parte Transferencia / Parte Efectivo"],
+    ["Transbank"],
+    ["Deudor"],
 ]
 
 # Opciones Compartidas (Calibre, Tipo de Palta, Categoría)
@@ -196,13 +215,12 @@ async def flujo_tipo_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             ),
         )
         return SAL_FORMATO
-    else:
-        # En caso de elegir Venta (extensible)
+    else:  # Venta
         await update.message.reply_text(
-            "La opción Venta aún no tiene un flujo asignado.",
+            "1. Ingresa el Nombre del Cliente:",
             reply_markup=ReplyKeyboardRemove(),
         )
-        return ConversationHandler.END
+        return VEN_CLIENTE
 
 
 # ==============================================================================
@@ -388,6 +406,110 @@ async def sal_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ==============================================================================
+# FLUJO VENTA
+# ==============================================================================
+
+async def ven_cliente_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["cliente"] = _message_text(update)
+    await update.message.reply_text(
+        "2. Ingresa Kilos Vendidos:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return VEN_KILOS_VENDIDOS
+
+
+async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["kilos_vendidos"] = _message_text(update)
+    await update.message.reply_text(
+        "3. Selecciona el Tipo de Pago:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_TIPO_PAGO, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return VEN_TIPO_PAGO
+
+
+async def ven_tipo_pago_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["tipo_pago"] = _message_text(update)
+    await update.message.reply_text(
+        "4. Selecciona el Calibre:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return VEN_CALIBRE
+
+
+async def ven_calibre_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["calibre"] = _message_text(update)
+    await update.message.reply_text(
+        "5. Selecciona el Tipo de Palta:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return VEN_TIPO_PALTA
+
+
+async def ven_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["tipo_palta"] = _message_text(update)
+    await update.message.reply_text(
+        "6. Selecciona la Categoría:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return VEN_CATEGORIA
+
+
+async def ven_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["categoria"] = _message_text(update)
+    await update.message.reply_text(
+        "7. Ingresa Monto Total de Venta:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return VEN_MONTO_TOTAL
+
+
+async def ven_monto_total_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["monto_total"] = _message_text(update)
+    await update.message.reply_text(
+        "8. Ingresa Monto Pagado:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return VEN_MONTO_PAGADO
+
+
+async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["monto_pagado"] = _message_text(update)
+    return await finalizar_y_guardar(update, context)
+
+
+# ==============================================================================
 # FINALIZACIÓN Y GUARDADO DE DATOS
 # ==============================================================================
 
@@ -397,7 +519,7 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
 
-    # Mapeo universal de campos para exportar en la misma tabla de Google Sheets
+    # Payload completo para enviar a Google Sheets
     payload = {
         "fecha": registered_at,
         "origen": origen,
@@ -412,6 +534,11 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
         "tara": context.user_data.get("tara", ""),
         "kilos_salieron": context.user_data.get("kilos_salieron", ""),
         "cajas_hechas": context.user_data.get("cajas_hechas", ""),
+        "cliente": context.user_data.get("cliente", ""),
+        "kilos_vendidos": context.user_data.get("kilos_vendidos", ""),
+        "tipo_pago": context.user_data.get("tipo_pago", ""),
+        "monto_total": context.user_data.get("monto_total", ""),
+        "monto_pagado": context.user_data.get("monto_pagado", ""),
     }
 
     # Envío mediante Webhook
@@ -432,7 +559,7 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Construcción dinámica del mensaje de resumen según el flujo realizado
     if tipo == "Entrada":
         resumen = (
-            f"   *REGISTRO DE ENTRADA*\n\n"
+            f"📥 *REGISTRO DE ENTRADA*\n\n"
             f"• *Fecha:* {registered_at}\n"
             f"• *Origen:* {origen}\n"
             f"• *Proveedor:* {payload['proveedor']}\n"
@@ -444,9 +571,9 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"• *Kilos Brutos:* {payload['kilos_brutos']}\n"
             f"• *Tara (Kilos):* {payload['tara']}"
         )
-    else:  # Salida
+    elif tipo == "Salida":
         resumen = (
-            f"   *REGISTRO DE SALIDA*\n\n"
+            f"📤 *REGISTRO DE SALIDA*\n\n"
             f"• *Fecha:* {registered_at}\n"
             f"• *Origen:* {origen}\n"
             f"• *Formato Salida:* {payload['formato']}\n"
@@ -455,6 +582,20 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"• *Calibre:* {payload['calibre']}\n"
             f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
             f"• *Categoría:* {payload['categoria']}"
+        )
+    else:  # Venta
+        resumen = (
+            f"💵 *REGISTRO DE VENTA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Cliente:* {payload['cliente']}\n"
+            f"• *Kilos Vendidos:* {payload['kilos_vendidos']}\n"
+            f"• *Tipo de Pago:* {payload['tipo_pago']}\n"
+            f"• *Calibre:* {payload['calibre']}\n"
+            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
+            f"• *Categoría:* {payload['categoria']}\n"
+            f"• *Monto Total Venta:* {payload['monto_total']}\n"
+            f"• *Monto Pagado:* {payload['monto_pagado']}"
         )
 
     await update.message.reply_text(
@@ -507,6 +648,16 @@ def build_application(token: str) -> Application:
             SAL_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_calibre_chosen)],
             SAL_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_tipo_palta_chosen)],
             SAL_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_categoria_chosen)],
+
+            # Estados Venta
+            VEN_CLIENTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_cliente_entered)],
+            VEN_KILOS_VENDIDOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_kilos_vendidos_entered)],
+            VEN_TIPO_PAGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_tipo_pago_chosen)],
+            VEN_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_calibre_chosen)],
+            VEN_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_tipo_palta_chosen)],
+            VEN_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_categoria_chosen)],
+            VEN_MONTO_TOTAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_total_entered)],
+            VEN_MONTO_PAGADO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_pagado_entered)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
