@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Final, Sequence
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram.error import InvalidToken
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -192,6 +193,9 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 0
     except (ConfigurationError, ValueError) as exc:
         logger.error("%s", exc)
+        return 2
+    except InvalidToken:
+        logger.error("Telegram rechazó BOT_TOKEN. Genera un token nuevo en BotFather.")
         return 2
     except KeyboardInterrupt:
         logger.warning("Bot detenido por el usuario")

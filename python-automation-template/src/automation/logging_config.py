@@ -10,3 +10,6 @@ def configure_logging(level: str) -> None:
         datefmt="%Y-%m-%dT%H:%M:%S%z",
         force=True,
     )
+    # httpx incluye URLs completas en INFO; las peticiones de Telegram pueden
+    # contener el token del bot en la ruta y nunca deben aparecer en logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
