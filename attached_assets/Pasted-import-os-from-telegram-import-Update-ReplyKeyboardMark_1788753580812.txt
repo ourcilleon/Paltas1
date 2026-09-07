@@ -1,0 +1,70 @@
+import os
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters,
+)
+
+TIPO_PALTA, KILOS, USUARIO = range(3)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    reply_keyboard = [["Palta 1", "Palta 2"]]
+    await update.message.reply_text(
+        "1. Elige el tipo de palta que quieres ingresar:",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return TIPO_PALTA
+
+async def tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["tipo_palta"] = update.message.text
+    await update.message.reply_text("2. Ingresa los kilos:", reply_markup=ReplyKeyboardRemove())
+    return KILOS
+
+async def kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["kilos"] = update.message.text
+    reply_keyboard = [["Usuario 1"], ["Usuario 2"], ["Usuario 3"]]
+    await update.message.reply_text(
+        "3. ¿Quién está registrando esto?",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return USUARIO
+
+async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["usuario"] = update.message.text
+    resumen = (
+        "✅ **Registro completado**\n\n"
+        f"• Tipo: {context.user_data['tipo_palta']}\n"
+        f"• Kilos: {context.user_data['kilos']}\n"
+        f"• Registrado por: {context.user_data['usuario']}"
+    )
+    await update.message.reply_text(resumen, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Registro cancelado.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+def main():
+    # Obtiene el token de las variables de entorno de Render
+    token = os.environ.get("BOT_TOKEN")
+    app = Application.builder().token(token).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, tipo_palta_chosen)],
+            KILOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, kilos_entered)],
+            USUARIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, usuario_chosen)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    app.add_handler(conv_handler)
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()

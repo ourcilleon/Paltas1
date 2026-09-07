@@ -8,13 +8,19 @@ version = "0.1.0"
 description = "Plantilla pequeña y extensible para scripts de automatización en Python"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "python-telegram-bot>=20.0,<23.0",
+]
 
 [project.scripts]
 automation = "automation.cli:main"
+telegram-bot = "Main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools]
+py-modules = ["Main"]
 
 [tool.ruff]
 line-length = 100

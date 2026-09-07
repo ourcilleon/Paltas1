@@ -8,7 +8,7 @@ modo `--dry-run` permite comprobar una ejecución sin realizar efectos externos.
 
 - Python 3.11 o superior
 
-No hay dependencias de ejecución externas.
+La plantilla incluye `python-telegram-bot` para el ejemplo opcional del bot.
 
 ## Estructura
 
@@ -47,8 +47,10 @@ el sistema:
 | `LOG_LEVEL` | `INFO` | Nivel de logging |
 | `OUTPUT_DIR` | `output` | Carpeta del resultado de ejemplo |
 | `REQUEST_TIMEOUT_SECONDS` | `30` | Timeout para futuros adaptadores externos |
+| `BOT_TOKEN` | vacío | Token privado del bot de Telegram |
 
-No guardes credenciales en `.env.example` ni en el repositorio. Para futuros
+No guardes credenciales en `.env.example` ni en el repositorio. El archivo
+`.env` está excluido por `.gitignore`. Para futuros
 servicios, añade solo nombres de variables y valores de muestra no sensibles.
 
 ## Ejecución
@@ -80,6 +82,35 @@ PYTHONPATH=src python -m automation.cli --name "Ada" --dry-run
 
 Los códigos de salida son `0` para éxito, `2` para errores esperados de entrada
 o configuración, `130` para cancelación y `1` para fallos inesperados.
+
+## Bot de Telegram
+
+El archivo `Main.py` incluye un flujo de conversación para registrar:
+
+1. Tipo de palta (`Palta 1` o `Palta 2`).
+2. Cantidad de kilos.
+3. Usuario que realiza el registro.
+
+Configura `BOT_TOKEN` en `.env` y arráncalo con:
+
+```bash
+telegram-bot
+```
+
+También puedes ejecutarlo directamente:
+
+```bash
+python Main.py
+```
+
+Antes de conectarlo a Telegram, valida la configuración con:
+
+```bash
+telegram-bot --dry-run
+```
+
+El modo `--dry-run` requiere un `BOT_TOKEN` válido en la configuración, pero no
+inicia polling ni realiza llamadas a Telegram.
 
 ## Pruebas
 
