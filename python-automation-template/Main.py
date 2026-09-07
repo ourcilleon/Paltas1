@@ -31,8 +31,14 @@ from automation.logging_config import configure_logging
 logger = logging.getLogger(__name__)
 
 TIPO_PALTA, KILOS, USUARIO = range(3)
-TIPOS_PALTA: Final[list[list[str]]] = [["Palta 1", "Palta 2"]]
-USUARIOS: Final[list[list[str]]] = [["Usuario 1"], ["Usuario 2"], ["Usuario 3"]]
+TIPOS_PALTA: Final[list[list[str]]] = [["Palta Hass", "Palta La Cruz"]]
+USUARIOS: Final[list[list[str]]] = [
+    ["Maria"],
+    ["Pedro"],
+    ["Juan"],
+    ["Mauricio"],
+    ["Ana"],
+]
 
 
 def _message_text(update: Update) -> str:

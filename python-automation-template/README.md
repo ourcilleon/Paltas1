@@ -87,9 +87,9 @@ o configuración, `130` para cancelación y `1` para fallos inesperados.
 
 El archivo `Main.py` incluye un flujo de conversación para registrar:
 
-1. Tipo de palta (`Palta 1` o `Palta 2`).
+1. Tipo de palta (`Palta Hass` o `Palta La Cruz`).
 2. Cantidad de kilos.
-3. Usuario que realiza el registro.
+3. Usuario que realiza el registro (`Maria`, `Pedro`, `Juan`, `Mauricio` o `Ana`).
 
 Configura `BOT_TOKEN` en `.env` y arráncalo con:
 
