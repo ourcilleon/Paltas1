@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import logging
 import os
+import re
 import sys
 import threading
 from typing import Final
@@ -111,7 +112,7 @@ OPCIONES_TIPO_PAGO: Final = [
     ["Deudor"],
 ]
 
-# Opciones Compartidas (Calibre, Tipo de Palta, Categoría)
+# Opciones Compartidas
 OPCIONES_CALIBRE: Final = [
     ["Extra"],
     ["Primera con Extra"],
@@ -149,6 +150,38 @@ def _message_text(update: Update) -> str:
     if update.message is None or update.message.text is None:
         raise ValueError("El mensaje no contiene texto")
     return update.message.text.strip()
+
+
+def parsear_y_formatear_numero(texto: str) -> str | None:
+    """
+    Valida si el texto es un número.
+    Si es válido, devuelve el número formateado con separadores de miles (.) y coma decimal (,).
+    Si no es un número, retorna None.
+    """
+    # Eliminar espacios en blanco y puntos de miles existentes
+    limpio = texto.replace(" ", "").replace("$", "")
+    
+    # Normalizar comas y puntos decimales
+    if "," in limpio and "." in limpio:
+        # Ejemplo: 1.250,50 -> elimina punto de miles
+        limpio = limpio.replace(".", "").replace(",", ".")
+    elif "," in limpio:
+        # Ejemplo: 1250,50 -> convierte coma a punto para float
+        limpio = limpio.replace(",", ".")
+
+    try:
+        val = float(limpio)
+        # Formatear el número con formato español/chileno (puntos para miles, coma para decimales)
+        if val.is_integer():
+            return f"{int(val):,}".replace(",", ".")
+        else:
+            # Mantener decimales si existen
+            partes = f"{val:,.2f}".split(".")
+            entera = partes[0].replace(",", ".")
+            decimal = partes[1]
+            return f"{entera},{decimal}"
+    except ValueError:
+        return None
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -415,7 +448,7 @@ async def ven_cliente_entered(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data["cliente"] = _message_text(update)
     await update.message.reply_text(
-        "2. Ingresa Kilos Vendidos:",
+        "2. Ingresa Kilos Vendidos (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return VEN_KILOS_VENDIDOS
@@ -425,7 +458,16 @@ async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAU
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["kilos_vendidos"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para los Kilos Vendidos (ej: 1500 ó 1500.5):"
+        )
+        return VEN_KILOS_VENDIDOS
+
+    context.user_data["kilos_vendidos"] = num_formateado
     await update.message.reply_text(
         "3. Selecciona el Tipo de Pago:",
         reply_markup=ReplyKeyboardMarkup(
@@ -483,7 +525,7 @@ async def ven_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data["categoria"] = _message_text(update)
     await update.message.reply_text(
-        "7. Ingresa Monto Total de Venta:",
+        "7. Ingresa Monto Total de Venta (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return VEN_MONTO_TOTAL
@@ -493,9 +535,18 @@ async def ven_monto_total_entered(update: Update, context: ContextTypes.DEFAULT_
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["monto_total"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para el Monto Total (ej: 250000):"
+        )
+        return VEN_MONTO_TOTAL
+
+    context.user_data["monto_total"] = num_formateado
     await update.message.reply_text(
-        "8. Ingresa Monto Pagado:",
+        "8. Ingresa Monto Pagado (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return VEN_MONTO_PAGADO
@@ -505,7 +556,16 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["monto_pagado"] = _message_text(update)
+    texto = _message_text(update)
+    num_formateado = parsear_y_formatear_numero(texto)
+
+    if num_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para el Monto Pagado (ej: 250000):"
+        )
+        return VEN_MONTO_PAGADO
+
+    context.user_data["monto_pagado"] = num_formateado
     return await finalizar_y_guardar(update, context)
 
 
@@ -519,7 +579,6 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
 
-    # Payload completo para enviar a Google Sheets
     payload = {
         "fecha": registered_at,
         "origen": origen,
@@ -556,7 +615,7 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.error("Error al enviar payload a Google Sheets: %s", e)
 
-    # Construcción dinámica del mensaje de resumen según el flujo realizado
+    # Resumen
     if tipo == "Entrada":
         resumen = (
             f"📥 *REGISTRO DE ENTRADA*\n\n"
@@ -589,13 +648,13 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"• *Fecha:* {registered_at}\n"
             f"• *Origen:* {origen}\n"
             f"• *Cliente:* {payload['cliente']}\n"
-            f"• *Kilos Vendidos:* {payload['kilos_vendidos']}\n"
+            f"• *Kilos Vendidos:* {payload['kilos_vendidos']} Kg\n"
             f"• *Tipo de Pago:* {payload['tipo_pago']}\n"
             f"• *Calibre:* {payload['calibre']}\n"
             f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
             f"• *Categoría:* {payload['categoria']}\n"
-            f"• *Monto Total Venta:* {payload['monto_total']}\n"
-            f"• *Monto Pagado:* {payload['monto_pagado']}"
+            f"• *Monto Total Venta:* ${payload['monto_total']}\n"
+            f"• *Monto Pagado:* ${payload['monto_pagado']}"
         )
 
     await update.message.reply_text(
