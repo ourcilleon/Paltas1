@@ -91,6 +91,9 @@ El archivo `Main.py` incluye un flujo de conversación para registrar:
 2. Cantidad de kilos.
 3. Usuario que realiza el registro (`Maria`, `Pedro`, `Juan`, `Mauricio` o `Ana`).
 
+Al terminar, el bot muestra el botón **Ingresar siguiente pedido** para iniciar
+otro registro sin tener que escribir `/start` nuevamente.
+
 Configura `BOT_TOKEN` en `.env` y arráncalo con:
 
 ```bash

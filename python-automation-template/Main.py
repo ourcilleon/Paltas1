@@ -42,6 +42,7 @@ USUARIOS: Final[list[list[str]]] = [
     ["Ana"],
 ]
 CHILE_TIMEZONE: Final = ZoneInfo("America/Santiago")
+NEXT_ORDER_BUTTON: Final = "Ingresar siguiente pedido"
 
 
 def _message_text(update: Update) -> str:
@@ -133,7 +134,10 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(
         resumen,
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=ReplyKeyboardMarkup(
+            [[NEXT_ORDER_BUTTON]],
+            resize_keyboard=True,
+        ),
     )
     return ConversationHandler.END
 
@@ -153,7 +157,10 @@ def build_application(token: str) -> Application:
     """Construye la aplicación sin arrancar el polling."""
     application = Application.builder().token(token).build()
     conversation = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            MessageHandler(filters.Regex(f"^{NEXT_ORDER_BUTTON}$"), start),
+        ],
         states={
             TIPO_PALTA: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, tipo_palta_chosen)
