@@ -1,4 +1,4 @@
-"""Bot de Telegram para el registro de Entrada y Salida de Paltas."""
+"""Bot de Telegram para el registro de Entrada, Salida y Venta de Paltas."""
 
 from __future__ import annotations
 
@@ -48,33 +48,79 @@ def run_dummy_server():
 
 # Definición de Estados de la Conversación
 (
-    FLUJO_TIPO,
-    CANTIDAD,
-    PROVEEDOR,
     ORIGEN,
-    FORMATO,
-    CAJAS_OBTENIDAS,
-    KILOS_BRUTOS,
-    TARA,
-) = range(8)
+    FLUJO_TIPO,
+    # Estados de ENTRADA
+    ENT_PROVEEDOR,
+    ENT_FORMATO,
+    ENT_CANTIDAD,
+    ENT_CALIBRE,
+    ENT_TIPO_PALTA,
+    ENT_CATEGORIA,
+    ENT_KILOS_BRUTOS,
+    ENT_TARA,
+    # Estados de SALIDA
+    SAL_FORMATO,
+    SAL_KILOS,
+    SAL_CAJAS,
+    SAL_CALIBRE,
+    SAL_TIPO_PALTA,
+    SAL_CATEGORIA,
+) = range(16)
 
 # Teclados y Opciones
-OPCIONES_MENU: Final = [["Entrada"], ["Salida"]]
-OPCIONES_SALIDA: Final = [
-    ["Bandeja 10kg"],
-    ["Bandeja 15kg"],
-    ["Gamela 10kg"],
-    ["Gamela 15kg"],
-]
+OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
+OPCIONES_TIPO_REGISTRO: Final = [["Entrada"], ["Salida"], ["Venta"]]
+
+# Opciones Flujo Entrada
 OPCIONES_PROVEEDORES: Final = [
-    ["Proveedor 1"],
-    ["Proveedor 2"],
-    ["Proveedor 3"],
-    ["Proveedor 4"],
-    ["Proveedor 5"],
+    ["Vida Pal"],
+    ["Frutos del Rancho"],
+    ["Chile Pal"],
+    ["Superior"],
 ]
-OPCIONES_ORIGEN: Final = [["Chile"], ["Perú"]]
-OPCIONES_FORMATO: Final = [["Bean (Cajón)"], ["Pallet (Bandejas)"]]
+OPCIONES_FORMATO_ENTRADA: Final = [
+    ["Pallet (Bandejas)"],
+    ["Bins"],
+    ["Gamelas"],
+]
+
+# Opciones Flujo Salida
+OPCIONES_FORMATO_SALIDA: Final = [
+    ["Bandeja 10Kg"],
+    ["Gamela 15Kg"],
+    ["Cajas 4Kg"],
+]
+
+# Opciones Compartidas (Calibre, Tipo de Palta, Categoría)
+OPCIONES_CALIBRE: Final = [
+    ["Extra"],
+    ["Primera con Extra"],
+    ["Primera"],
+    ["Segunda"],
+    ["Tercera"],
+    ["Cuarta"],
+    ["Quinta"],
+    ["Comercial A"],
+    ["Comercial B"],
+    ["Comercial C"],
+    ["Comercial"],
+]
+
+OPCIONES_TIPO_PALTA: Final = [
+    ["Palta Hass"],
+    ["Palta Edranol"],
+    ["Palta Esther"],
+    ["Palta Fuerte"],
+    ["Negra de la Cruz"],
+]
+
+OPCIONES_CATEGORIA: Final = [
+    ["Categoría 1"],
+    ["Categoría 1 1/2"],
+    ["Categoría 2"],
+    ["Comercial (Descarte)"],
+]
 
 CHILE_TIMEZONE: Final = ZoneInfo("America/Santiago")
 NEXT_ORDER_BUTTON: Final = "Ingresar siguiente registro"
@@ -87,73 +133,13 @@ def _message_text(update: Update) -> str:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia el registro seleccionando el tipo de flujo."""
+    """Inicia el registro solicitando el Origen."""
     if update.message is None:
         return ConversationHandler.END
 
     context.user_data.clear()
     await update.message.reply_text(
-        "1. Selecciona el tipo de registro:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_MENU, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return FLUJO_TIPO
-
-
-async def flujo_tipo_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa si es Entrada o Salida."""
-    if update.message is None:
-        return ConversationHandler.END
-
-    opcion = _message_text(update)
-    if opcion not in ["Entrada", "Salida"]:
-        await update.message.reply_text("Por favor selecciona una opción válida usando los botones.")
-        return FLUJO_TIPO
-
-    context.user_data["tipo_flujo"] = opcion
-
-    if opcion == "Entrada":
-        await update.message.reply_text(
-            "2. Ingrese Cantidad:",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return CANTIDAD
-    else:
-        await update.message.reply_text(
-            "2. Selecciona el formato de Salida:",
-            reply_markup=ReplyKeyboardMarkup(
-                OPCIONES_SALIDA, one_time_keyboard=True, resize_keyboard=True
-            ),
-        )
-        return CANTIDAD
-
-
-async def cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa la cantidad o la opción de Salida e ingresa a Proveedores."""
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["cantidad_o_formato_salida"] = _message_text(update)
-
-    await update.message.reply_text(
-        "3. Selecciona el Proveedor:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_PROVEEDORES, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return PROVEEDOR
-
-
-async def proveedor_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa la selección de proveedor e ingresa a Origen."""
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["proveedor"] = _message_text(update)
-
-    await update.message.reply_text(
-        "4. Selecciona el Origen:",
+        "1. Selecciona el Origen:",
         reply_markup=ReplyKeyboardMarkup(
             OPCIONES_ORIGEN, one_time_keyboard=True, resize_keyboard=True
         ),
@@ -162,65 +148,160 @@ async def proveedor_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def origen_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa Origen e ingresa a Formato (tanto para Entrada como para Salida)."""
+    """Guarda el origen y solicita el Tipo de Registro."""
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["origen"] = _message_text(update)
+    opcion = _message_text(update)
+    if opcion not in ["Curacaví", "Lo Valledor"]:
+        await update.message.reply_text("Por favor selecciona una opción válida usando los botones.")
+        return ORIGEN
+
+    context.user_data["origen"] = opcion
 
     await update.message.reply_text(
-        "5. Selecciona el Formato:",
+        "2. Selecciona el Tipo de Registro:",
         reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_FORMATO, one_time_keyboard=True, resize_keyboard=True
+            OPCIONES_TIPO_REGISTRO, one_time_keyboard=True, resize_keyboard=True
         ),
     )
-    return FORMATO
+    return FLUJO_TIPO
 
 
-async def formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa Formato e ingresa a Cajas Obtenidas."""
+async def flujo_tipo_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Dirige al flujo correspondiente según el tipo seleccionado."""
+    if update.message is None:
+        return ConversationHandler.END
+
+    opcion = _message_text(update)
+    if opcion not in ["Entrada", "Salida", "Venta"]:
+        await update.message.reply_text("Por favor selecciona una opción válida usando los botones.")
+        return FLUJO_TIPO
+
+    context.user_data["tipo_flujo"] = opcion
+
+    if opcion == "Entrada":
+        await update.message.reply_text(
+            "1. Selecciona el Proveedor:",
+            reply_markup=ReplyKeyboardMarkup(
+                OPCIONES_PROVEEDORES, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return ENT_PROVEEDOR
+    elif opcion == "Salida":
+        await update.message.reply_text(
+            "1. Selecciona el Formato de Salida:",
+            reply_markup=ReplyKeyboardMarkup(
+                OPCIONES_FORMATO_SALIDA, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return SAL_FORMATO
+    else:
+        # En caso de elegir Venta (extensible)
+        await update.message.reply_text(
+            "La opción Venta aún no tiene un flujo asignado.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return ConversationHandler.END
+
+
+# ==============================================================================
+# FLUJO ENTRADA
+# ==============================================================================
+
+async def ent_proveedor_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["proveedor"] = _message_text(update)
+    await update.message.reply_text(
+        "2. Selecciona el Formato de Entrada:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_FORMATO_ENTRADA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ENT_FORMATO
+
+
+async def ent_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
     context.user_data["formato"] = _message_text(update)
-
     await update.message.reply_text(
-        "6. Ingresar Cajas Obtenidas:",
+        "3. Ingresa la Cantidad de Entrada:",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return CAJAS_OBTENIDAS
+    return ENT_CANTIDAD
 
 
-async def cajas_obtenidas_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa Cajas Obtenidas e ingresa a Kilos Brutos."""
+async def ent_cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["cajas_obtenidas"] = _message_text(update)
-
+    context.user_data["cantidad"] = _message_text(update)
     await update.message.reply_text(
-        "7. Ingresar Kilos Brutos:",
+        "4. Selecciona el Calibre:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ENT_CALIBRE
+
+
+async def ent_calibre_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["calibre"] = _message_text(update)
+    await update.message.reply_text(
+        "5. Selecciona el Tipo de Palta:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ENT_TIPO_PALTA
+
+
+async def ent_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["tipo_palta"] = _message_text(update)
+    await update.message.reply_text(
+        "6. Selecciona la Categoría:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ENT_CATEGORIA
+
+
+async def ent_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["categoria"] = _message_text(update)
+    await update.message.reply_text(
+        "7. Ingresa Kilos Brutos:",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return KILOS_BRUTOS
+    return ENT_KILOS_BRUTOS
 
 
-async def kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa Kilos Brutos e ingresa a Tara."""
+async def ent_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
     context.user_data["kilos_brutos"] = _message_text(update)
-
     await update.message.reply_text(
-        "8. Ingresar Tara:",
+        "8. Ingresa Tara (Kilos):",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return TARA
+    return ENT_TARA
 
 
-async def tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa la Tara y finaliza el registro."""
+async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
@@ -228,21 +309,109 @@ async def tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return await finalizar_y_guardar(update, context)
 
 
+# ==============================================================================
+# FLUJO SALIDA
+# ==============================================================================
+
+async def sal_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["formato"] = _message_text(update)
+    await update.message.reply_text(
+        "2. Ingresa Kilos que Salieron:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return SAL_KILOS
+
+
+async def sal_kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["kilos_salieron"] = _message_text(update)
+    await update.message.reply_text(
+        "3. Ingresa Cajas Hechas:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return SAL_CAJAS
+
+
+async def sal_cajas_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["cajas_hechas"] = _message_text(update)
+    await update.message.reply_text(
+        "4. Selecciona el Calibre:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return SAL_CALIBRE
+
+
+async def sal_calibre_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["calibre"] = _message_text(update)
+    await update.message.reply_text(
+        "5. Selecciona el Tipo de Palta:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return SAL_TIPO_PALTA
+
+
+async def sal_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["tipo_palta"] = _message_text(update)
+    await update.message.reply_text(
+        "6. Selecciona la Categoría:",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return SAL_CATEGORIA
+
+
+async def sal_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["categoria"] = _message_text(update)
+    return await finalizar_y_guardar(update, context)
+
+
+# ==============================================================================
+# FINALIZACIÓN Y GUARDADO DE DATOS
+# ==============================================================================
+
 async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Genera el resumen, envía a Google Sheets y concluye el flujo."""
+    """Genera el resumen, envía datos al webhook y concluye la conversación."""
     registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
     tipo = context.user_data.get("tipo_flujo", "")
+    origen = context.user_data.get("origen", "")
 
+    # Mapeo universal de campos para exportar en la misma tabla de Google Sheets
     payload = {
         "fecha": registered_at,
+        "origen": origen,
         "tipo_flujo": tipo,
-        "cantidad_o_salida": context.user_data.get("cantidad_o_formato_salida", ""),
         "proveedor": context.user_data.get("proveedor", ""),
-        "origen": context.user_data.get("origen", ""),
         "formato": context.user_data.get("formato", ""),
-        "cajas_obtenidas": context.user_data.get("cajas_obtenidas", ""),
+        "cantidad": context.user_data.get("cantidad", ""),
+        "calibre": context.user_data.get("calibre", ""),
+        "tipo_palta": context.user_data.get("tipo_palta", ""),
+        "categoria": context.user_data.get("categoria", ""),
         "kilos_brutos": context.user_data.get("kilos_brutos", ""),
         "tara": context.user_data.get("tara", ""),
+        "kilos_salieron": context.user_data.get("kilos_salieron", ""),
+        "cajas_hechas": context.user_data.get("cajas_hechas", ""),
     }
 
     # Envío mediante Webhook
@@ -260,18 +429,33 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.error("Error al enviar payload a Google Sheets: %s", e)
 
-    # Resumen unificado en texto para Telegram
-    resumen = (
-        f"*Registro de {tipo} Completado*\n\n"
-        f"• Fecha: {registered_at}\n"
-        f"• Cantidad/Detalle: {payload['cantidad_o_salida']}\n"
-        f"• Proveedor: {payload['proveedor']}\n"
-        f"• Origen: {payload['origen']}\n"
-        f"• Formato: {payload['formato']}\n"
-        f"• Cajas Obtenidas: {payload['cajas_obtenidas']}\n"
-        f"• Kilos Brutos: {payload['kilos_brutos']}\n"
-        f"• Tara: {payload['tara']}"
-    )
+    # Construcción dinámica del mensaje de resumen según el flujo realizado
+    if tipo == "Entrada":
+        resumen = (
+            f"   *REGISTRO DE ENTRADA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Proveedor:* {payload['proveedor']}\n"
+            f"• *Formato:* {payload['formato']}\n"
+            f"• *Cantidad Entrada:* {payload['cantidad']}\n"
+            f"• *Calibre:* {payload['calibre']}\n"
+            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
+            f"• *Categoría:* {payload['categoria']}\n"
+            f"• *Kilos Brutos:* {payload['kilos_brutos']}\n"
+            f"• *Tara (Kilos):* {payload['tara']}"
+        )
+    else:  # Salida
+        resumen = (
+            f"   *REGISTRO DE SALIDA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Formato Salida:* {payload['formato']}\n"
+            f"• *Kilos que Salieron:* {payload['kilos_salieron']}\n"
+            f"• *Cajas Hechas:* {payload['cajas_hechas']}\n"
+            f"• *Calibre:* {payload['calibre']}\n"
+            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
+            f"• *Categoría:* {payload['categoria']}"
+        )
 
     await update.message.reply_text(
         resumen,
@@ -303,14 +487,26 @@ def build_application(token: str) -> Application:
             MessageHandler(filters.Regex(f"^{NEXT_ORDER_BUTTON}$"), start),
         ],
         states={
-            FLUJO_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, flujo_tipo_chosen)],
-            CANTIDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, cantidad_entered)],
-            PROVEEDOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, proveedor_chosen)],
             ORIGEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, origen_chosen)],
-            FORMATO: [MessageHandler(filters.TEXT & ~filters.COMMAND, formato_chosen)],
-            CAJAS_OBTENIDAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, cajas_obtenidas_entered)],
-            KILOS_BRUTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, kilos_brutos_entered)],
-            TARA: [MessageHandler(filters.TEXT & ~filters.COMMAND, tara_entered)],
+            FLUJO_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, flujo_tipo_chosen)],
+            
+            # Estados Entrada
+            ENT_PROVEEDOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_proveedor_chosen)],
+            ENT_FORMATO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_formato_chosen)],
+            ENT_CANTIDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_cantidad_entered)],
+            ENT_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_calibre_chosen)],
+            ENT_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_tipo_palta_chosen)],
+            ENT_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_categoria_chosen)],
+            ENT_KILOS_BRUTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_kilos_brutos_entered)],
+            ENT_TARA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_tara_entered)],
+            
+            # Estados Salida
+            SAL_FORMATO: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_formato_chosen)],
+            SAL_KILOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_kilos_entered)],
+            SAL_CAJAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_cajas_entered)],
+            SAL_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_calibre_chosen)],
+            SAL_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_tipo_palta_chosen)],
+            SAL_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_categoria_chosen)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
