@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
 import logging
 import os
 import sys
 import threading
 from typing import Final
+import urllib.request
 from zoneinfo import ZoneInfo
 
-import requests
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.error import InvalidToken
 from telegram.ext import (
@@ -29,7 +30,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Servidor HTTP dummy para mantener activo Render
+# Servidor HTTP integrado para que Render detecte el puerto abierto de inmediato
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -132,7 +133,7 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data["usuario"] = usuario
     registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
 
-    # ENVÍO A GOOGLE SHEETS
+    # ENVÍO A GOOGLE SHEETS USANDO LIBRERÍA NATIVA (urllib)
     sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
     if sheets_url:
         payload = {
@@ -142,7 +143,13 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "usuario": context.user_data["usuario"],
         }
         try:
-            requests.post(sheets_url, json=payload, timeout=5)
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                sheets_url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(req, timeout=5)
         except Exception as e:
             logger.error("Error al enviar a Google Sheets: %s", e)
 
@@ -200,6 +207,7 @@ def main() -> None:
         logger.error("Falta BOT_TOKEN en las variables de entorno.")
         sys.exit(2)
 
+    # Inicia servidor web dummy para pasar el chequeo de Render
     threading.Thread(target=run_dummy_server, daemon=True).start()
 
     try:
