@@ -7,11 +7,13 @@ para que pueda reutilizarse o reemplazarse por otra interfaz en el futuro.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import logging
 import os
 import sys
 from pathlib import Path
 from typing import Final, Sequence
+from zoneinfo import ZoneInfo
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.error import InvalidToken
@@ -39,6 +41,7 @@ USUARIOS: Final[list[list[str]]] = [
     ["Mauricio"],
     ["Ana"],
 ]
+CHILE_TIMEZONE: Final = ZoneInfo("America/Santiago")
 
 
 def _message_text(update: Update) -> str:
@@ -119,11 +122,13 @@ async def usuario_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return USUARIO
 
     context.user_data["usuario"] = usuario
+    registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
     resumen = (
         "*Registro completado*\n\n"
         f"• Tipo: {context.user_data['tipo_palta']}\n"
         f"• Kilos: {context.user_data['kilos']}\n"
-        f"• Registrado por: {context.user_data['usuario']}"
+        f"• Registrado por: {context.user_data['usuario']}\n"
+        f"• Fecha y hora: {registered_at}"
     )
     await update.message.reply_text(
         resumen,
