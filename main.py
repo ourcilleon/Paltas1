@@ -628,9 +628,13 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
 
 async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el resumen de los datos ingresados y solicita confirmación del usuario."""
-    # Formato MM/DD/YYYY HH:MM
-    fecha_formateada = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
-    context.user_data["fecha_registro"] = fecha_formateada
+    now = datetime.now(CHILE_TIMEZONE)
+    
+    # Formato ISO para Sheets (evita errores de interpretación)
+    context.user_data["fecha_registro"] = now.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Formato DD/MM/YYYY para mostrar en Telegram
+    fecha_formateada = now.strftime("%d/%m/%Y %H:%M")
     
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
