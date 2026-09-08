@@ -75,11 +75,18 @@ def run_dummy_server():
     VEN_CATEGORIA,
     VEN_MONTO_TOTAL,
     VEN_MONTO_PAGADO,
-) = range(24)
+    # Nuevo estado de Confirmación
+    CONFIRMACION,
+) = range(25)
 
 # Teclados y Opciones
 OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
 OPCIONES_TIPO_REGISTRO: Final = [["Entrada"], ["Salida"], ["Venta"]]
+
+BTN_CONFIRMAR: Final = "✅ Confirmar y Guardar"
+BTN_CORREGIR: Final = "🔄 Corregir / Recomenzar"
+
+OPCIONES_CONFIRMACION: Final = [[BTN_CONFIRMAR], [BTN_CORREGIR]]
 
 # Opciones Flujo Entrada
 OPCIONES_PROVEEDORES: Final = [
@@ -380,7 +387,7 @@ async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ENT_TARA
 
     context.user_data["tara"] = num_formateado
-    return await finalizar_y_guardar(update, context)
+    return await mostrar_resumen_previo(update, context)
 
 
 # ==============================================================================
@@ -478,7 +485,7 @@ async def sal_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
 
     context.user_data["categoria"] = _message_text(update)
-    return await finalizar_y_guardar(update, context)
+    return await mostrar_resumen_previo(update, context)
 
 
 # ==============================================================================
@@ -612,16 +619,106 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
         return VEN_MONTO_PAGADO
 
     context.user_data["monto_pagado"] = num_formateado
-    return await finalizar_y_guardar(update, context)
+    return await mostrar_resumen_previo(update, context)
 
 
 # ==============================================================================
-# FINALIZACIÓN Y GUARDADO DE DATOS
+# RESUMEN PREVIO Y CONFIRMACIÓN
 # ==============================================================================
 
-async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Genera el resumen, envía datos al webhook y concluye la conversación."""
+async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Muestra el resumen de los datos ingresados y solicita confirmación del usuario."""
     registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
+    context.user_data["fecha_registro"] = registered_at
+    
+    tipo = context.user_data.get("tipo_flujo", "")
+    origen = context.user_data.get("origen", "")
+
+    if tipo == "Entrada":
+        resumen = (
+            f"📋 *REVISA LOS DATOS DE ENTRADA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Proveedor:* {context.user_data.get('proveedor', '')}\n"
+            f"• *Formato:* {context.user_data.get('formato', '')}\n"
+            f"• *Cantidad Entrada:* {context.user_data.get('cantidad', '')}\n"
+            f"• *Calibre:* {context.user_data.get('calibre', '')}\n"
+            f"• *Tipo de Palta:* {context.user_data.get('tipo_palta', '')}\n"
+            f"• *Categoría:* {context.user_data.get('categoria', '')}\n"
+            f"• *Kilos Brutos:* {context.user_data.get('kilos_brutos', '')} Kg\n"
+            f"• *Tara:* {context.user_data.get('tara', '')} Kg\n\n"
+            f"¿Deseas guardar este registro en la planilla?"
+        )
+    elif tipo == "Salida":
+        resumen = (
+            f"📋 *REVISA LOS DATOS DE SALIDA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Formato Salida:* {context.user_data.get('formato', '')}\n"
+            f"• *Kilos que Salieron:* {context.user_data.get('kilos_salieron', '')} Kg\n"
+            f"• *Cajas Hechas:* {context.user_data.get('cajas_hechas', '')}\n"
+            f"• *Calibre:* {context.user_data.get('calibre', '')}\n"
+            f"• *Tipo de Palta:* {context.user_data.get('tipo_palta', '')}\n"
+            f"• *Categoría:* {context.user_data.get('categoria', '')}\n\n"
+            f"¿Deseas guardar este registro en la planilla?"
+        )
+    else:  # Venta
+        resumen = (
+            f"📋 *REVISA LOS DATOS DE VENTA*\n\n"
+            f"• *Fecha:* {registered_at}\n"
+            f"• *Origen:* {origen}\n"
+            f"• *Cliente:* {context.user_data.get('cliente', '')}\n"
+            f"• *Kilos Vendidos:* {context.user_data.get('kilos_vendidos', '')} Kg\n"
+            f"• *Tipo de Pago:* {context.user_data.get('tipo_pago', '')}\n"
+            f"• *Calibre:* {context.user_data.get('calibre', '')}\n"
+            f"• *Tipo de Palta:* {context.user_data.get('tipo_palta', '')}\n"
+            f"• *Categoría:* {context.user_data.get('categoria', '')}\n"
+            f"• *Monto Total Venta:* ${context.user_data.get('monto_total', '')}\n"
+            f"• *Monto Pagado:* ${context.user_data.get('monto_pagado', '')}\n\n"
+            f"¿Deseas guardar este registro en la planilla?"
+        )
+
+    if update.message is not None:
+        await update.message.reply_text(
+            resumen,
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(
+                OPCIONES_CONFIRMACION,
+                one_time_keyboard=True,
+                resize_keyboard=True,
+            ),
+        )
+    return CONFIRMACION
+
+
+async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Procesa la decisión del usuario (Guardar o Recomenzar)."""
+    if update.message is None:
+        return ConversationHandler.END
+
+    opcion = _message_text(update)
+
+    if opcion == BTN_CORREGIR:
+        context.user_data.clear()
+        await update.message.reply_text(
+            "🔄 Registro descartado. Comenzando nuevamente.\n\n1. Selecciona el Origen:",
+            reply_markup=ReplyKeyboardMarkup(
+                OPCIONES_ORIGEN, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return ORIGEN
+
+    if opcion != BTN_CONFIRMAR:
+        await update.message.reply_text(
+            "Por favor, selecciona una opción válida usando los botones:",
+            reply_markup=ReplyKeyboardMarkup(
+                OPCIONES_CONFIRMACION, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return CONFIRMACION
+
+    # Si se presionó Confirmar -> Enviar a Webhook
+    registered_at = context.user_data.get("fecha_registro", datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M"))
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
 
@@ -661,50 +758,8 @@ async def finalizar_y_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.error("Error al enviar payload a Google Sheets: %s", e)
 
-    # Resumen
-    if tipo == "Entrada":
-        resumen = (
-            f"📥 *REGISTRO DE ENTRADA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
-            f"• *Origen:* {origen}\n"
-            f"• *Proveedor:* {payload['proveedor']}\n"
-            f"• *Formato:* {payload['formato']}\n"
-            f"• *Cantidad Entrada:* {payload['cantidad']}\n"
-            f"• *Calibre:* {payload['calibre']}\n"
-            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
-            f"• *Categoría:* {payload['categoria']}\n"
-            f"• *Kilos Brutos:* {payload['kilos_brutos']} Kg\n"
-            f"• *Tara:* {payload['tara']} Kg"
-        )
-    elif tipo == "Salida":
-        resumen = (
-            f"📤 *REGISTRO DE SALIDA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
-            f"• *Origen:* {origen}\n"
-            f"• *Formato Salida:* {payload['formato']}\n"
-            f"• *Kilos que Salieron:* {payload['kilos_salieron']} Kg\n"
-            f"• *Cajas Hechas:* {payload['cajas_hechas']}\n"
-            f"• *Calibre:* {payload['calibre']}\n"
-            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
-            f"• *Categoría:* {payload['categoria']}"
-        )
-    else:  # Venta
-        resumen = (
-            f"💵 *REGISTRO DE VENTA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
-            f"• *Origen:* {origen}\n"
-            f"• *Cliente:* {payload['cliente']}\n"
-            f"• *Kilos Vendidos:* {payload['kilos_vendidos']} Kg\n"
-            f"• *Tipo de Pago:* {payload['tipo_pago']}\n"
-            f"• *Calibre:* {payload['calibre']}\n"
-            f"• *Tipo de Palta:* {payload['tipo_palta']}\n"
-            f"• *Categoría:* {payload['categoria']}\n"
-            f"• *Monto Total Venta:* ${payload['monto_total']}\n"
-            f"• *Monto Pagado:* ${payload['monto_pagado']}"
-        )
-
     await update.message.reply_text(
-        resumen,
+        "🎉 *¡Registro guardado con éxito en la planilla!*",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup(
             [[NEXT_ORDER_BUTTON]],
@@ -763,6 +818,9 @@ def build_application(token: str) -> Application:
             VEN_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_categoria_chosen)],
             VEN_MONTO_TOTAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_total_entered)],
             VEN_MONTO_PAGADO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_pagado_entered)],
+
+            # Estado Confirmación
+            CONFIRMACION: [MessageHandler(filters.TEXT & ~filters.COMMAND, procesar_confirmacion)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
