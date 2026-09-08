@@ -628,8 +628,9 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
 
 async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el resumen de los datos ingresados y solicita confirmación del usuario."""
-    registered_at = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
-    context.user_data["fecha_registro"] = registered_at
+    # Formato MM/DD/YYYY HH:MM
+    fecha_formateada = datetime.now(CHILE_TIMEZONE).strftime("%m/%d/%Y %H:%M")
+    context.user_data["fecha_registro"] = fecha_formateada
     
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
@@ -637,7 +638,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
     if tipo == "Entrada":
         resumen = (
             f"📋 *REVISA LOS DATOS DE ENTRADA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
+            f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Proveedor:* {context.user_data.get('proveedor', '')}\n"
             f"• *Formato:* {context.user_data.get('formato', '')}\n"
@@ -652,7 +653,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
     elif tipo == "Salida":
         resumen = (
             f"📋 *REVISA LOS DATOS DE SALIDA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
+            f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Formato Salida:* {context.user_data.get('formato', '')}\n"
             f"• *Kilos que Salieron:* {context.user_data.get('kilos_salieron', '')} Kg\n"
@@ -665,7 +666,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
     else:  # Venta
         resumen = (
             f"📋 *REVISA LOS DATOS DE VENTA*\n\n"
-            f"• *Fecha:* {registered_at}\n"
+            f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Cliente:* {context.user_data.get('cliente', '')}\n"
             f"• *Kilos Vendidos:* {context.user_data.get('kilos_vendidos', '')} Kg\n"
@@ -717,8 +718,11 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return CONFIRMACION
 
-    # Si se presionó Confirmar -> Enviar a Webhook
-    registered_at = context.user_data.get("fecha_registro", datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M"))
+    # Si se presionó Confirmar -> Enviar a Webhook con formato MM/DD/YYYY HH:MM
+    registered_at = context.user_data.get(
+        "fecha_registro", 
+        datetime.now(CHILE_TIMEZONE).strftime("%m/%d/%Y %H:%M")
+    )
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
 
