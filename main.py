@@ -629,7 +629,7 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
 async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el resumen de los datos ingresados y solicita confirmación del usuario."""
     # Formato MM/DD/YYYY HH:MM
-    fecha_formateada = datetime.now(CHILE_TIMEZONE).strftime("%m/%d/%Y %H:%M")
+    fecha_formateada = datetime.now(CHILE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
     context.user_data["fecha_registro"] = fecha_formateada
     
     tipo = context.user_data.get("tipo_flujo", "")
@@ -637,7 +637,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
 
     if tipo == "Entrada":
         resumen = (
-            f"📋 *REVISA LOS DATOS DE ENTRADA*\n\n🥑"
+            f"📋 *REVISA LOS DATOS DE ENTRADA* 🥑\n\n"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Proveedor:* {context.user_data.get('proveedor', '')}\n"
@@ -652,7 +652,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
         )
     elif tipo == "Salida":
         resumen = (
-            f"📋 *REVISA LOS DATOS DE SALIDA*\n\n🥑"
+            f"📋 *REVISA LOS DATOS DE SALIDA* 🥑\n\n"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Formato Salida:* {context.user_data.get('formato', '')}\n"
@@ -665,7 +665,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
         )
     else:  # Venta
         resumen = (
-            f"📋 *REVISA LOS DATOS DE VENTA*\n\n🥑"
+            f"📋 *REVISA LOS DATOS DE VENTA* 🥑\n\n"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Cliente:* {context.user_data.get('cliente', '')}\n"
