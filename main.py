@@ -81,6 +81,18 @@ def run_dummy_server():
 OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
 OPCIONES_TIPO_REGISTRO: Final = [["Entrada"], ["Salida"], ["Venta"]]
 
+# Teclado Numérico con Botones Grandes
+TECLADO_NUMERICO: Final = ReplyKeyboardMarkup(
+    [
+        ["1", "2", "3"],
+        ["4", "5", "6"],
+        ["7", "8", "9"],
+        ["0"]
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
 # Opciones Flujo Entrada
 OPCIONES_PROVEEDORES: Final = [
     ["Vida Pal"],
@@ -274,7 +286,7 @@ async def ent_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["formato"] = _message_text(update)
     await update.message.reply_text(
         "3. Ingresa la Cantidad Entrada (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return ENT_CANTIDAD
 
@@ -288,7 +300,8 @@ async def ent_cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para la Cantidad Entrada (ej: 50 ó 1200):"
+            "⚠️ Por favor ingresa un valor numérico válido para la Cantidad Entrada (ej: 50 ó 1200):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return ENT_CANTIDAD
 
@@ -337,7 +350,7 @@ async def ent_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["categoria"] = _message_text(update)
     await update.message.reply_text(
         "7. Ingresa Kilos Brutos (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return ENT_KILOS_BRUTOS
 
@@ -351,14 +364,15 @@ async def ent_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Kilos Brutos (ej: 1500 ó 1500.5):"
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos Brutos (ej: 1500 ó 1500.5):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return ENT_KILOS_BRUTOS
 
     context.user_data["kilos_brutos"] = num_formateado
     await update.message.reply_text(
         "8. Ingresa Tara (Kilos) (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return ENT_TARA
 
@@ -372,7 +386,8 @@ async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Tara (Kilos) (ej: 20 ó 20.5):"
+            "⚠️ Por favor ingresa un valor numérico válido para Tara (Kilos) (ej: 20 ó 20.5):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return ENT_TARA
 
@@ -391,7 +406,7 @@ async def sal_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["formato"] = _message_text(update)
     await update.message.reply_text(
         "2. Ingresa Kilos que Salieron (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return SAL_KILOS
 
@@ -405,14 +420,15 @@ async def sal_kilos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Kilos que Salieron (ej: 800 ó 800.5):"
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos que Salieron (ej: 800 ó 800.5):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return SAL_KILOS
 
     context.user_data["kilos_salieron"] = num_formateado
     await update.message.reply_text(
         "3. Ingresa Cajas Hechas (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return SAL_CAJAS
 
@@ -426,7 +442,8 @@ async def sal_cajas_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Cajas Hechas (ej: 100):"
+            "⚠️ Por favor ingresa un valor numérico válido para Cajas Hechas (ej: 100):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return SAL_CAJAS
 
@@ -487,7 +504,7 @@ async def ven_cliente_entered(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data["cliente"] = _message_text(update)
     await update.message.reply_text(
         "2. Ingresa Kilos Vendidos (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return VEN_KILOS_VENDIDOS
 
@@ -501,7 +518,8 @@ async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAU
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Kilos Vendidos (ej: 1500 ó 1500.5):"
+            "⚠️ Por favor ingresa un valor numérico válido para Kilos Vendidos (ej: 1500 ó 1500.5):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return VEN_KILOS_VENDIDOS
 
@@ -564,7 +582,7 @@ async def ven_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["categoria"] = _message_text(update)
     await update.message.reply_text(
         "7. Ingresa Monto Total de Venta (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return VEN_MONTO_TOTAL
 
@@ -578,14 +596,15 @@ async def ven_monto_total_entered(update: Update, context: ContextTypes.DEFAULT_
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para el Monto Total (ej: 250000):"
+            "⚠️ Por favor ingresa un valor numérico válido para el Monto Total (ej: 250000):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return VEN_MONTO_TOTAL
 
     context.user_data["monto_total"] = num_formateado
     await update.message.reply_text(
         "8. Ingresa Monto Pagado (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=TECLADO_NUMERICO,
     )
     return VEN_MONTO_PAGADO
 
@@ -599,7 +618,8 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para el Monto Pagado (ej: 250000):"
+            "⚠️ Por favor ingresa un valor numérico válido para el Monto Pagado (ej: 250000):",
+            reply_markup=TECLADO_NUMERICO,
         )
         return VEN_MONTO_PAGADO
 
