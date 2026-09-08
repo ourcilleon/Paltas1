@@ -637,7 +637,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
 
     if tipo == "Entrada":
         resumen = (
-            f"📋 *REVISA LOS DATOS DE ENTRADA*\n\n 🥑"
+            f"📋 *REVISA LOS DATOS DE ENTRADA*\n\n🥑"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Proveedor:* {context.user_data.get('proveedor', '')}\n"
@@ -652,7 +652,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
         )
     elif tipo == "Salida":
         resumen = (
-            f"📋 *REVISA LOS DATOS DE SALIDA*\n\n 🥑"
+            f"📋 *REVISA LOS DATOS DE SALIDA*\n\n🥑"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Formato Salida:* {context.user_data.get('formato', '')}\n"
@@ -665,7 +665,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
         )
     else:  # Venta
         resumen = (
-            f"📋 *REVISA LOS DATOS DE VENTA*\n\n 🥑"
+            f"📋 *REVISA LOS DATOS DE VENTA*\n\n🥑"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Cliente:* {context.user_data.get('cliente', '')}\n"
