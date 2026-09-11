@@ -96,9 +96,10 @@ OPCIONES_PROVEEDORES: Final = [
     ["Superior"],
 ]
 OPCIONES_FORMATO_ENTRADA: Final = [
-    ["Pallet (Bandejas)"],
-    ["Bins"],
+    ["Pallets"],
+    ["Bandejas"],
     ["Gamelas"],
+    ["Bins"],
 ]
 
 # Opciones Flujo Salida
@@ -120,6 +121,11 @@ OPCIONES_TIPO_PAGO: Final = [
 
 # Opciones Compartidas
 OPCIONES_CALIBRE: Final = [
+    ["12"],
+    ["14"],
+    ["16"],
+    ["18"],
+    ["20"],
     ["Extra"],
     ["Primera con Extra"],
     ["Primera"],
