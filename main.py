@@ -75,7 +75,7 @@ def run_dummy_server():
     VEN_CATEGORIA,
     VEN_MONTO_TOTAL,
     VEN_MONTO_PAGADO,
-    # Nuevo estado de Confirmación
+    # Estado de Confirmación
     CONFIRMACION,
 ) = range(25)
 
@@ -728,10 +728,9 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return CONFIRMACION
 
-    # Si se presionó Confirmar -> Enviar a Webhook con formato MM/DD/YYYY HH:MM
     registered_at = context.user_data.get(
         "fecha_registro", 
-        datetime.now(CHILE_TIMEZONE).strftime("%m/%d/%Y %H:%M")
+        datetime.now(CHILE_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
     )
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
@@ -757,20 +756,35 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         "monto_pagado": context.user_data.get("monto_pagado", ""),
     }
 
-    # Envío mediante Webhook
+    # Envío mediante Webhook con gestión de redirección
     sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
     if sheets_url:
         try:
             data = json.dumps(payload).encode("utf-8")
+            
+            class RedirectHandler(urllib.request.HTTPRedirectHandler):
+                def http_error_302(self, req, fp, code, msg, headers):
+                    return self.parent.open(headers['Location'], data=data)
+                http_error_301 = http_error_302
+                http_error_303 = http_error_302
+                http_error_307 = http_error_302
+
+            opener = urllib.request.build_opener(RedirectHandler)
             req = urllib.request.Request(
                 sheets_url,
                 data=data,
                 headers={"Content-Type": "application/json"},
+                method="POST"
             )
-            urllib.request.urlopen(req, timeout=5)
-            logger.info("Datos del flujo guardados correctamente en Google Sheets.")
+            
+            with opener.open(req, timeout=10) as response:
+                respuesta_texto = response.read().decode("utf-8")
+                logger.info("Respuesta de Google Sheets Webhook: %s", respuesta_texto)
+                
         except Exception as e:
             logger.error("Error al enviar payload a Google Sheets: %s", e)
+    else:
+        logger.warning("No se encontró la variable de entorno GOOGLE_SHEETS_WEBHOOK_URL")
 
     await update.message.reply_text(
         "🎉🥑 *¡Registro guardado con éxito en la planilla!*",
