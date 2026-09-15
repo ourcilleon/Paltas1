@@ -13,10 +13,17 @@ from typing import Final
 import urllib.request
 from zoneinfo import ZoneInfo
 
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.error import InvalidToken
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
@@ -54,11 +61,11 @@ def run_dummy_server():
     ENT_PROVEEDOR,
     ENT_FORMATO,
     ENT_CANTIDAD,
-    ENT_CALIBRE,
-    ENT_TIPO_PALTA,
-    ENT_CATEGORIA,
-    ENT_KILOS_BRUTOS,
-    ENT_TARA,
+    ENT_CALIBRES_MULTI,
+    ENT_LOOP_TIPO_PALTA,
+    ENT_LOOP_CATEGORIA,
+    ENT_LOOP_KILOS_BRUTOS,
+    ENT_LOOP_TARA,
     # Estados de SALIDA
     SAL_FORMATO,
     SAL_KILOS,
@@ -77,7 +84,7 @@ def run_dummy_server():
     VEN_MONTO_PAGADO,
     # Estado de Confirmación
     CONFIRMACION,
-) = range(25)
+) = range(26)
 
 # Teclados y Opciones
 OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
@@ -88,7 +95,6 @@ BTN_CORREGIR: Final = "🔄 Corregir / Recomenzar"
 
 OPCIONES_CONFIRMACION: Final = [[BTN_CONFIRMAR], [BTN_CORREGIR]]
 
-# Opciones Flujo Entrada
 OPCIONES_PROVEEDORES: Final = [
     ["Vida Pal"],
     ["Frutos del Rancho"],
@@ -102,14 +108,12 @@ OPCIONES_FORMATO_ENTRADA: Final = [
     ["Bins"],
 ]
 
-# Opciones Flujo Salida
 OPCIONES_FORMATO_SALIDA: Final = [
     ["Bandeja 10Kg"],
     ["Gamela 15Kg"],
     ["Cajas 4Kg"],
 ]
 
-# Opciones Flujo Venta
 OPCIONES_TIPO_PAGO: Final = [
     ["Efectivo"],
     ["Cheque"],
@@ -119,25 +123,14 @@ OPCIONES_TIPO_PAGO: Final = [
     ["Deudor"],
 ]
 
-# Opciones Compartidas
-OPCIONES_CALIBRE: Final = [
-    ["12"],
-    ["14"],
-    ["16"],
-    ["18"],
-    ["20"],
-    ["Extra"],
-    ["Primera con Extra"],
-    ["Primera"],
-    ["Segunda"],
-    ["Tercera"],
-    ["Cuarta"],
-    ["Quinta"],
-    ["Comercial A"],
-    ["Comercial B"],
-    ["Comercial C"],
-    ["Comercial"],
+# Lista completa de Calibres
+LISTA_CALIBRES: Final = [
+    "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32",
+    "Extra", "Primera con Extra", "Primera", "Segunda", "Tercera", "Cuarta", "Quinta",
+    "Comercial A", "Comercial B", "Comercial C", "Comercial"
 ]
+
+OPCIONES_CALIBRE_INDIVIDUAL: Final = [[c] for c in LISTA_CALIBRES]
 
 OPCIONES_TIPO_PALTA: Final = [
     ["Palta Hass"],
@@ -165,11 +158,7 @@ def _message_text(update: Update) -> str:
 
 
 def parsear_y_formatear_numero(texto: str) -> str | None:
-    """
-    Valida si el texto es un número.
-    Si es válido, devuelve el número formateado con separadores de miles (.) y coma decimal (,).
-    Si no es un número, retorna None.
-    """
+    """Valida si el texto es numérico y aplica formato de miles."""
     limpio = texto.replace(" ", "").replace("$", "")
     
     if "," in limpio and "." in limpio:
@@ -190,6 +179,26 @@ def parsear_y_formatear_numero(texto: str) -> str | None:
         return None
 
 
+def construir_teclado_calibres_inline(seleccionados: set[str]) -> InlineKeyboardMarkup:
+    """Construye un teclado inline para selección múltiple de calibres."""
+    keyboard = []
+    # 2 botones por fila
+    for i in range(0, len(LISTA_CALIBRES), 2):
+        row = []
+        c1 = LISTA_CALIBRES[i]
+        prefix1 = "✅ " if c1 in seleccionados else "⬜ "
+        row.append(InlineKeyboardButton(f"{prefix1}{c1}", callback_data=f"cal_{c1}"))
+        
+        if i + 1 < len(LISTA_CALIBRES):
+            c2 = LISTA_CALIBRES[i + 1]
+            prefix2 = "✅ " if c2 in seleccionados else "⬜ "
+            row.append(InlineKeyboardButton(f"{prefix2}{c2}", callback_data=f"cal_{c2}"))
+        keyboard.append(row)
+        
+    keyboard.append([InlineKeyboardButton("➡️ Finalizar Selección", callback_data="cal_DONE")])
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia el registro solicitando el Origen."""
     if update.message is None:
@@ -206,7 +215,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def origen_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Guarda el origen y solicita el Tipo de Registro."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -227,7 +235,6 @@ async def origen_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def flujo_tipo_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Dirige al flujo correspondiente según el tipo seleccionado."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -263,7 +270,7 @@ async def flujo_tipo_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ==============================================================================
-# FLUJO ENTRADA
+# FLUJO ENTRADA (Múltiple Selección de Calibres y Bucle)
 # ==============================================================================
 
 async def ent_proveedor_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -307,56 +314,127 @@ async def ent_cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYP
         return ENT_CANTIDAD
 
     context.user_data["cantidad"] = num_formateado
+    context.user_data["calibres_seleccionados"] = set()
+
+    reply_markup = construir_teclado_calibres_inline(set())
     await update.message.reply_text(
-        "4. Selecciona el Calibre:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
-        ),
+        "4. Selecciona uno o varios calibres tocando los botones. Cuando termines, presiona 'Finalizar Selección':",
+        reply_markup=reply_markup,
     )
-    return ENT_CALIBRE
+    return ENT_CALIBRES_MULTI
 
 
-async def ent_calibre_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def ent_calibres_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    if query is None or query.data is None:
+        return ENT_CALIBRES_MULTI
+
+    await query.answer()
+
+    data = query.data
+    seleccionados: set[str] = context.user_data.get("calibres_seleccionados", set())
+
+    if data == "cal_DONE":
+        if not seleccionados:
+            await query.edit_message_text(
+                "⚠️ Debes seleccionar al menos un calibre antes de continuar.\n\n"
+                "Selecciona los calibres que necesitas ingresar:",
+                reply_markup=construir_teclado_calibres_inline(seleccionados)
+            )
+            return ENT_CALIBRES_MULTI
+
+        # Convertir a lista y preparar el recorrido
+        lista_calibres_ordenada = [c for c in LISTA_CALIBRES if c in seleccionados]
+        context.user_data["calibres_queue"] = lista_calibres_ordenada
+        context.user_data["calibres_detalles"] = [] // Guardará los detalles de cada calibre
+        context.user_data["current_calibre_idx"] = 0
+
+        # Eliminar el teclado inline
+        await query.edit_message_text(f"Calibres seleccionados: {', '.join(lista_calibres_ordenada)}")
+        
+        # Iniciar las preguntas para el primer calibre
+        return await pedir_siguiente_calibre_atributo(query, context)
+
+    if data.startswith("cal_"):
+        calibre = data.replace("cal_", "")
+        if calibre in seleccionados:
+            seleccionados.remove(calibre)
+        else:
+            seleccionados.add(calibre)
+
+        context.user_data["calibres_seleccionados"] = seleccionados
+        await query.edit_message_reply_markup(
+            reply_markup=construir_teclado_calibres_inline(seleccionados)
+        )
+
+    return ENT_CALIBRES_MULTI
+
+
+async def pedir_siguiente_calibre_atributo(event_or_update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+
+    if idx >= len(queue):
+        # Todos los calibres han sido completados -> Mostrar resumen final
+        return await mostrar_resumen_previo(event_or_update, context)
+
+    calibre_actual = queue[idx]
+    total = len(queue)
+
+    mensaje = f"📦 *Detalles para Calibre {calibre_actual}* ({idx + 1}/{total})\n\nSelecciona el Tipo de Palta:"
+    
+    markup = ReplyKeyboardMarkup(OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True)
+    
+    if hasattr(event_or_update, 'message') and event_or_update.message is not None:
+        await event_or_update.message.reply_text(mensaje, parse_mode="Markdown", reply_markup=markup)
+    elif hasattr(event_or_update, 'message'):
+        # Proviene de CallbackQuery
+        await event_or_update.message.reply_text(mensaje, parse_mode="Markdown", reply_markup=markup)
+
+    return ENT_LOOP_TIPO_PALTA
+
+
+async def ent_loop_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["calibre"] = _message_text(update)
+    tipo_palta = _message_text(update)
+    context.user_data["temp_tipo_palta"] = tipo_palta
+
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+    calibre_actual = queue[idx]
+
     await update.message.reply_text(
-        "5. Selecciona el Tipo de Palta:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return ENT_TIPO_PALTA
-
-
-async def ent_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["tipo_palta"] = _message_text(update)
-    await update.message.reply_text(
-        "6. Selecciona la Categoría:",
+        f"📦 *Calibre {calibre_actual}*\nSelecciona la Categoría:",
+        parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup(
             OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
         ),
     )
-    return ENT_CATEGORIA
+    return ENT_LOOP_CATEGORIA
 
 
-async def ent_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def ent_loop_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["categoria"] = _message_text(update)
+    categoria = _message_text(update)
+    context.user_data["temp_categoria"] = categoria
+
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+    calibre_actual = queue[idx]
+
     await update.message.reply_text(
-        "7. Ingresa Kilos Brutos (sólo números):",
+        f"📦 *Calibre {calibre_actual}*\nIngresa Kilos Brutos (sólo números):",
+        parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return ENT_KILOS_BRUTOS
+    return ENT_LOOP_KILOS_BRUTOS
 
 
-async def ent_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def ent_loop_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
@@ -368,17 +446,23 @@ async def ent_kilos_brutos_entered(update: Update, context: ContextTypes.DEFAULT
             "⚠️ Por favor ingresa un valor numérico válido para Kilos Brutos (ej: 1500 ó 1500.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
-        return ENT_KILOS_BRUTOS
+        return ENT_LOOP_KILOS_BRUTOS
 
-    context.user_data["kilos_brutos"] = num_formateado
+    context.user_data["temp_kilos_brutos"] = num_formateado
+
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+    calibre_actual = queue[idx]
+
     await update.message.reply_text(
-        "8. Ingresa Tara (Kilos) (sólo números):",
+        f"📦 *Calibre {calibre_actual}*\nIngresa Tara en Kilos (sólo números):",
+        parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return ENT_TARA
+    return ENT_LOOP_TARA
 
 
-async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def ent_loop_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
@@ -387,13 +471,29 @@ async def ent_tara_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if num_formateado is None:
         await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para Tara (Kilos) (ej: 20 ó 20.5):",
+            "⚠️ Por favor ingresa un valor numérico válido para Tara (ej: 20 ó 20.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
-        return ENT_TARA
+        return ENT_LOOP_TARA
 
-    context.user_data["tara"] = num_formateado
-    return await mostrar_resumen_previo(update, context)
+    # Guardar el detalle de este calibre
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+    calibre_actual = queue[idx]
+
+    detalle = {
+        "calibre": calibre_actual,
+        "tipo_palta": context.user_data.get("temp_tipo_palta", ""),
+        "categoria": context.user_data.get("temp_categoria", ""),
+        "kilos_brutos": context.user_data.get("temp_kilos_brutos", ""),
+        "tara": num_formateado,
+    }
+
+    context.user_data.setdefault("calibres_detalles", []).append(detalle)
+
+    # Avanzar al siguiente calibre
+    context.user_data["current_calibre_idx"] = idx + 1
+    return await pedir_siguiente_calibre_atributo(update, context)
 
 
 # ==============================================================================
@@ -452,7 +552,7 @@ async def sal_cajas_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text(
         "4. Selecciona el Calibre:",
         reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
+            OPCIONES_CALIBRE_INDIVIDUAL, one_time_keyboard=True, resize_keyboard=True
         ),
     )
     return SAL_CALIBRE
@@ -542,7 +642,7 @@ async def ven_tipo_pago_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         "4. Selecciona el Calibre:",
         reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_CALIBRE, one_time_keyboard=True, resize_keyboard=True
+            OPCIONES_CALIBRE_INDIVIDUAL, one_time_keyboard=True, resize_keyboard=True
         ),
     )
     return VEN_CALIBRE
@@ -632,20 +732,26 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
 # RESUMEN PREVIO Y CONFIRMACIÓN
 # ==============================================================================
 
-async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Muestra el resumen de los datos ingresados y solicita confirmación del usuario."""
+async def mostrar_resumen_previo(event_or_update, context: ContextTypes.DEFAULT_TYPE) -> int:
     now = datetime.now(CHILE_TIMEZONE)
-    
-    # Formato ISO para Sheets (evita errores de interpretación)
     context.user_data["fecha_registro"] = now.strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Formato DD/MM/YYYY para mostrar en Telegram
     fecha_formateada = now.strftime("%d/%m/%Y %H:%M")
     
     tipo = context.user_data.get("tipo_flujo", "")
     origen = context.user_data.get("origen", "")
 
     if tipo == "Entrada":
+        detalles = context.user_data.get("calibres_detalles", [])
+        bloque_calibres = ""
+        for det in detalles:
+            bloque_calibres += (
+                f"\n  • *Calibre {det['calibre']}*:\n"
+                f"      - Tipo Palta: {det['tipo_palta']}\n"
+                f"      - Categoría: {det['categoria']}\n"
+                f"      - Kilos Brutos: {det['kilos_brutos']} Kg\n"
+                f"      - Tara: {det['tara']} Kg\n"
+            )
+
         resumen = (
             f"📋 *REVISA LOS DATOS DE ENTRADA* 🥑\n\n"
             f"• *Fecha:* {fecha_formateada}\n"
@@ -653,11 +759,7 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
             f"• *Proveedor:* {context.user_data.get('proveedor', '')}\n"
             f"• *Formato:* {context.user_data.get('formato', '')}\n"
             f"• *Cantidad Entrada:* {context.user_data.get('cantidad', '')}\n"
-            f"• *Calibre:* {context.user_data.get('calibre', '')}\n"
-            f"• *Tipo de Palta:* {context.user_data.get('tipo_palta', '')}\n"
-            f"• *Categoría:* {context.user_data.get('categoria', '')}\n"
-            f"• *Kilos Brutos:* {context.user_data.get('kilos_brutos', '')} Kg\n"
-            f"• *Tara:* {context.user_data.get('tara', '')} Kg\n\n"
+            f"• *Detalle por Calibres ({len(detalles)}):*{bloque_calibres}\n"
             f"¿Deseas guardar este registro en la planilla?"
         )
     elif tipo == "Salida":
@@ -689,21 +791,17 @@ async def mostrar_resumen_previo(update: Update, context: ContextTypes.DEFAULT_T
             f"¿Deseas guardar este registro en la planilla?"
         )
 
-    if update.message is not None:
-        await update.message.reply_text(
-            resumen,
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(
-                OPCIONES_CONFIRMACION,
-                one_time_keyboard=True,
-                resize_keyboard=True,
-            ),
-        )
+    markup = ReplyKeyboardMarkup(OPCIONES_CONFIRMACION, one_time_keyboard=True, resize_keyboard=True)
+
+    if hasattr(event_or_update, 'message') and event_or_update.message is not None:
+        await event_or_update.message.reply_text(resumen, parse_mode="Markdown", reply_markup=markup)
+    elif hasattr(event_or_update, 'message'):
+        await event_or_update.message.reply_text(resumen, parse_mode="Markdown", reply_markup=markup)
+
     return CONFIRMACION
 
 
 async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Procesa la decisión del usuario (Guardar o Recomenzar)."""
     if update.message is None:
         return ConversationHandler.END
 
@@ -742,6 +840,7 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         "proveedor": context.user_data.get("proveedor", ""),
         "formato": context.user_data.get("formato", ""),
         "cantidad": context.user_data.get("cantidad", ""),
+        "detalles_calibres": context.user_data.get("calibres_detalles", []),
         "calibre": context.user_data.get("calibre", ""),
         "tipo_palta": context.user_data.get("tipo_palta", ""),
         "categoria": context.user_data.get("categoria", ""),
@@ -756,7 +855,7 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         "monto_pagado": context.user_data.get("monto_pagado", ""),
     }
 
-    # Envío mediante Webhook con gestión de redirección
+    # Envío mediante Webhook
     sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
     if sheets_url:
         try:
@@ -798,7 +897,6 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancela el proceso activo."""
     context.user_data.clear()
     if update.message is not None:
         await update.message.reply_text(
@@ -823,11 +921,11 @@ def build_application(token: str) -> Application:
             ENT_PROVEEDOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_proveedor_chosen)],
             ENT_FORMATO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_formato_chosen)],
             ENT_CANTIDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_cantidad_entered)],
-            ENT_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_calibre_chosen)],
-            ENT_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_tipo_palta_chosen)],
-            ENT_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_categoria_chosen)],
-            ENT_KILOS_BRUTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_kilos_brutos_entered)],
-            ENT_TARA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_tara_entered)],
+            ENT_CALIBRES_MULTI: [CallbackQueryHandler(ent_calibres_toggle_callback)],
+            ENT_LOOP_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_loop_tipo_palta_chosen)],
+            ENT_LOOP_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_loop_categoria_chosen)],
+            ENT_LOOP_KILOS_BRUTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_loop_kilos_brutos_entered)],
+            ENT_LOOP_TARA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ent_loop_tara_entered)],
             
             # Estados Salida
             SAL_FORMATO: [MessageHandler(filters.TEXT & ~filters.COMMAND, sal_formato_chosen)],
