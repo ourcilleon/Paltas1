@@ -84,7 +84,7 @@ def run_dummy_server():
     VEN_MONTO_PAGADO,
     # Estado de Confirmación
     CONFIRMACION,
-) = range(26)
+) = range(25)
 
 # Teclados y Opciones
 OPCIONES_ORIGEN: Final = [["Curacaví"], ["Lo Valledor"]]
