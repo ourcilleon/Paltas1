@@ -75,12 +75,12 @@ def run_dummy_server():
     SAL_LOOP_CAJAS_HECHAS,
     # Estados de VENTA
     VEN_CLIENTE,
-    VEN_KILOS_VENDIDOS,
+    VEN_CALIBRES_MULTI,
+    VEN_LOOP_TIPO_PALTA,
+    VEN_LOOP_CATEGORIA,
+    VEN_LOOP_KILOS_VENDIDOS,
+    VEN_LOOP_PRECIO_KILO,
     VEN_TIPO_PAGO,
-    VEN_CALIBRE,
-    VEN_TIPO_PALTA,
-    VEN_CATEGORIA,
-    VEN_MONTO_TOTAL,
     VEN_MONTO_PAGADO,
     # Estado de Confirmación
     CONFIRMACION,
@@ -177,6 +177,26 @@ def parsear_y_formatear_numero(texto: str) -> str | None:
             return f"{entera},{decimal}"
     except ValueError:
         return None
+
+
+def convertir_a_float(valor_str: str) -> float:
+    """Convierte un string formateado con puntos de miles a float."""
+    try:
+        limpio = str(valor_str).replace(".", "").replace(",", ".")
+        return float(limpio)
+    except ValueError:
+        return 0.0
+
+
+def formatear_monto(val: float) -> str:
+    """Formatea float a representación con separador de miles."""
+    if val.is_integer():
+        return f"{int(val):,}".replace(",", ".")
+    else:
+        partes = f"{val:,.2f}".split(".")
+        entera = partes[0].replace(",", ".")
+        decimal = partes[1]
+        return f"{entera},{decimal}"
 
 
 def construir_teclado_calibres_inline(seleccionados: set[str], prefix_callback: str = "cal_") -> InlineKeyboardMarkup:
@@ -474,7 +494,7 @@ async def ent_loop_tara_entered(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 # ==============================================================================
-# FLUJO SALIDA (Múltiple Selección de Calibres y Bucle)
+# FLUJO SALIDA
 # ==============================================================================
 
 async def sal_formato_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -651,14 +671,119 @@ async def ven_cliente_entered(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     context.user_data["cliente"] = _message_text(update)
+    context.user_data["calibres_seleccionados"] = set()
+
+    reply_markup = construir_teclado_calibres_inline(set(), "vencal_")
     await update.message.reply_text(
-        "2. Ingresa Kilos Vendidos (sólo números):",
+        "2. Selecciona uno o varios calibres tocando los botones. Cuando termines, presiona 'Finalizar Selección':",
+        reply_markup=reply_markup,
+    )
+    return VEN_CALIBRES_MULTI
+
+
+async def ven_calibres_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    if query is None or query.data is None:
+        return VEN_CALIBRES_MULTI
+
+    await query.answer()
+    data = query.data
+    seleccionados: set[str] = context.user_data.get("calibres_seleccionados", set())
+
+    if data == "vencal_DONE":
+        if not seleccionados:
+            await query.edit_message_text(
+                "⚠️ Debes seleccionar al menos un calibre antes de continuar.\n\n"
+                "Selecciona los calibres para la venta:",
+                reply_markup=construir_teclado_calibres_inline(seleccionados, "vencal_")
+            )
+            return VEN_CALIBRES_MULTI
+
+        lista_calibres_ordenada = [c for c in LISTA_CALIBRES if c in seleccionados]
+        context.user_data["calibres_queue"] = lista_calibres_ordenada
+        context.user_data["calibres_detalles"] = []
+        context.user_data["current_calibre_idx"] = 0
+
+        await query.edit_message_text(f"Calibres seleccionados: {', '.join(lista_calibres_ordenada)}")
+        return await pedir_siguiente_calibre_atributo_ven(query, context)
+
+    if data.startswith("vencal_"):
+        calibre = data.replace("vencal_", "")
+        if calibre in seleccionados:
+            seleccionados.remove(calibre)
+        else:
+            seleccionados.add(calibre)
+
+        context.user_data["calibres_seleccionados"] = seleccionados
+        await query.edit_message_reply_markup(
+            reply_markup=construir_teclado_calibres_inline(seleccionados, "vencal_")
+        )
+
+    return VEN_CALIBRES_MULTI
+
+
+async def pedir_siguiente_calibre_atributo_ven(event_or_update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+
+    if idx >= len(queue):
+        detalles = context.user_data.get("calibres_detalles", [])
+        monto_total_num = sum(convertir_a_float(d.get("subtotal_num", 0)) for d in detalles)
+        context.user_data["monto_total"] = formatear_monto(monto_total_num)
+
+        mensaje = "💰 Selecciona el Tipo de Pago:"
+        markup = ReplyKeyboardMarkup(OPCIONES_TIPO_PAGO, one_time_keyboard=True, resize_keyboard=True)
+        if hasattr(event_or_update, 'message') and event_or_update.message is not None:
+            await event_or_update.message.reply_text(mensaje, reply_markup=markup)
+
+        return VEN_TIPO_PAGO
+
+    calibre_actual = queue[idx]
+    total = len(queue)
+    mensaje = f"💰 *Detalles de Venta para Calibre {calibre_actual}* ({idx + 1}/{total})\n\nSelecciona el Tipo de Palta:"
+    markup = ReplyKeyboardMarkup(OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True)
+
+    if hasattr(event_or_update, 'message') and event_or_update.message is not None:
+        await event_or_update.message.reply_text(mensaje, parse_mode="Markdown", reply_markup=markup)
+
+    return VEN_LOOP_TIPO_PALTA
+
+
+async def ven_loop_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["temp_tipo_palta"] = _message_text(update)
+    idx = context.user_data.get("current_calibre_idx", 0)
+    calibre_actual = context.user_data.get("calibres_queue", [])[idx]
+
+    await update.message.reply_text(
+        f"💰 *Calibre {calibre_actual}*\nSelecciona la Categoría:",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(
+            OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return VEN_LOOP_CATEGORIA
+
+
+async def ven_loop_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    context.user_data["temp_categoria"] = _message_text(update)
+    idx = context.user_data.get("current_calibre_idx", 0)
+    calibre_actual = context.user_data.get("calibres_queue", [])[idx]
+
+    await update.message.reply_text(
+        f"💰 *Calibre {calibre_actual}*\nIngresa Kilos Vendidos (sólo números):",
+        parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
-    return VEN_KILOS_VENDIDOS
+    return VEN_LOOP_KILOS_VENDIDOS
 
 
-async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def ven_loop_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
@@ -670,89 +795,71 @@ async def ven_kilos_vendidos_entered(update: Update, context: ContextTypes.DEFAU
             "⚠️ Por favor ingresa un valor numérico válido para Kilos Vendidos (ej: 1500 ó 1500.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
-        return VEN_KILOS_VENDIDOS
+        return VEN_LOOP_KILOS_VENDIDOS
 
-    context.user_data["kilos_vendidos"] = num_formateado
+    context.user_data["temp_kilos_vendidos"] = num_formateado
+    idx = context.user_data.get("current_calibre_idx", 0)
+    calibre_actual = context.user_data.get("calibres_queue", [])[idx]
+
     await update.message.reply_text(
-        "3. Selecciona el Tipo de Pago:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_TIPO_PAGO, one_time_keyboard=True, resize_keyboard=True
-        ),
+        f"💰 *Calibre {calibre_actual}*\nIngresa Precio por Kilo (sólo números):",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    return VEN_TIPO_PAGO
+    return VEN_LOOP_PRECIO_KILO
+
+
+async def ven_loop_precio_kilo_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
+
+    texto = _message_text(update)
+    precio_formateado = parsear_y_formatear_numero(texto)
+
+    if precio_formateado is None:
+        await update.message.reply_text(
+            "⚠️ Por favor ingresa un valor numérico válido para el Precio por Kilo (ej: 2500):",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return VEN_LOOP_PRECIO_KILO
+
+    kilos_str = context.user_data.get("temp_kilos_vendidos", "0")
+    kilos_num = convertir_a_float(kilos_str)
+    precio_num = convertir_a_float(precio_formateado)
+    subtotal = kilos_num * precio_num
+
+    idx = context.user_data.get("current_calibre_idx", 0)
+    queue = context.user_data.get("calibres_queue", [])
+    calibre_actual = queue[idx]
+
+    detalle = {
+        "calibre": calibre_actual,
+        "tipo_palta": context.user_data.get("temp_tipo_palta", ""),
+        "categoria": context.user_data.get("temp_categoria", ""),
+        "kilos_vendidos": kilos_str,
+        "precio_kilo": precio_formateado,
+        "subtotal_num": subtotal,
+        "subtotal_venta": formatear_monto(subtotal),
+    }
+
+    context.user_data.setdefault("calibres_detalles", []).append(detalle)
+    context.user_data["current_calibre_idx"] = idx + 1
+    return await pedir_siguiente_calibre_atributo_ven(update, context)
 
 
 async def ven_tipo_pago_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None:
         return ConversationHandler.END
 
-    context.user_data["tipo_pago"] = _message_text(update)
+    tipo_pago = _message_text(update)
+    context.user_data["tipo_pago"] = tipo_pago
+
+    if tipo_pago == "Deudor":
+        context.user_data["monto_pagado"] = "0"
+        return await mostrar_resumen_previo(update, context)
+
     await update.message.reply_text(
-        "4. Selecciona el Calibre:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_CALIBRE_INDIVIDUAL, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return VEN_CALIBRE
-
-
-async def ven_calibre_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["calibre"] = _message_text(update)
-    await update.message.reply_text(
-        "5. Selecciona el Tipo de Palta:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_TIPO_PALTA, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return VEN_TIPO_PALTA
-
-
-async def ven_tipo_palta_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["tipo_palta"] = _message_text(update)
-    await update.message.reply_text(
-        "6. Selecciona la Categoría:",
-        reply_markup=ReplyKeyboardMarkup(
-            OPCIONES_CATEGORIA, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return VEN_CATEGORIA
-
-
-async def ven_categoria_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None:
-        return ConversationHandler.END
-
-    context.user_data["categoria"] = _message_text(update)
-    await update.message.reply_text(
-        "7. Ingresa Monto Total de Venta (sólo números):",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-    return VEN_MONTO_TOTAL
-
-
-async def ven_monto_total_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None:
-        return ConversationHandler.END
-
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
-
-    if num_formateado is None:
-        await update.message.reply_text(
-            "⚠️ Por favor ingresa un valor numérico válido para el Monto Total (ej: 250000):",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return VEN_MONTO_TOTAL
-
-    context.user_data["monto_total"] = num_formateado
-    await update.message.reply_text(
-        "8. Ingresa Monto Pagado (sólo números):",
+        "Ingresa Monto Pagado (sólo números):",
         reply_markup=ReplyKeyboardRemove(),
     )
     return VEN_MONTO_PAGADO
@@ -831,18 +938,29 @@ async def mostrar_resumen_previo(event_or_update, context: ContextTypes.DEFAULT_
             f"¿Deseas guardar este registro en la planilla?"
         )
     else:  # Venta
+        detalles = context.user_data.get("calibres_detalles", [])
+        bloque_calibres = ""
+        for det in detalles:
+            bloque_calibres += (
+                f"\n  • *Calibre {det['calibre']}*:\n"
+                f"      - Tipo Palta: {det['tipo_palta']}\n"
+                f"      - Categoría: {det['categoria']}\n"
+                f"      - Kilos Vendidos: {det['kilos_vendidos']} Kg\n"
+                f"      - Precio/Kg: ${det['precio_kilo']}\n"
+                f"      - Subtotal: ${det['subtotal_venta']}\n"
+            )
+
+        monto_pag_str = context.user_data.get("monto_pagado", "0")
+
         resumen = (
             f"📋 *REVISA LOS DATOS DE VENTA* 🥑\n\n"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Origen:* {origen}\n"
             f"• *Cliente:* {context.user_data.get('cliente', '')}\n"
-            f"• *Kilos Vendidos:* {context.user_data.get('kilos_vendidos', '')} Kg\n"
-            f"• *Tipo de Pago:* {context.user_data.get('tipo_pago', '')}\n"
-            f"• *Calibre:* {context.user_data.get('calibre', '')}\n"
-            f"• *Tipo de Palta:* {context.user_data.get('tipo_palta', '')}\n"
-            f"• *Categoría:* {context.user_data.get('categoria', '')}\n"
+            f"• *Detalle por Calibres ({len(detalles)}):*{bloque_calibres}\n"
             f"• *Monto Total Venta:* ${context.user_data.get('monto_total', '')}\n"
-            f"• *Monto Pagado:* ${context.user_data.get('monto_pagado', '')}\n\n"
+            f"• *Tipo de Pago:* {context.user_data.get('tipo_pago', '')}\n"
+            f"• *Monto Pagado:* ${monto_pag_str}\n\n"
             f"¿Deseas guardar este registro en la planilla?"
         )
 
@@ -905,7 +1023,7 @@ async def procesar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         "kilos_vendidos": context.user_data.get("kilos_vendidos", ""),
         "tipo_pago": context.user_data.get("tipo_pago", ""),
         "monto_total": context.user_data.get("monto_total", ""),
-        "monto_pagado": context.user_data.get("monto_pagado", ""),
+        "monto_pagado": context.user_data.get("monto_pagado", "0"),
     }
 
     sheets_url = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
@@ -987,12 +1105,12 @@ def build_application(token: str) -> Application:
 
             # Estados Venta
             VEN_CLIENTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_cliente_entered)],
-            VEN_KILOS_VENDIDOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_kilos_vendidos_entered)],
+            VEN_CALIBRES_MULTI: [CallbackQueryHandler(ven_calibres_toggle_callback)],
+            VEN_LOOP_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_loop_tipo_palta_chosen)],
+            VEN_LOOP_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_loop_categoria_chosen)],
+            VEN_LOOP_KILOS_VENDIDOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_loop_kilos_vendidos_entered)],
+            VEN_LOOP_PRECIO_KILO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_loop_precio_kilo_entered)],
             VEN_TIPO_PAGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_tipo_pago_chosen)],
-            VEN_CALIBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_calibre_chosen)],
-            VEN_TIPO_PALTA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_tipo_palta_chosen)],
-            VEN_CATEGORIA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_categoria_chosen)],
-            VEN_MONTO_TOTAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_total_entered)],
             VEN_MONTO_PAGADO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ven_monto_pagado_entered)],
 
             # Estado Confirmación
