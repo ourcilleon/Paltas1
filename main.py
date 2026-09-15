@@ -346,7 +346,7 @@ async def ent_calibres_toggle_callback(update: Update, context: ContextTypes.DEF
         # Convertir a lista y preparar el recorrido
         lista_calibres_ordenada = [c for c in LISTA_CALIBRES if c in seleccionados]
         context.user_data["calibres_queue"] = lista_calibres_ordenada
-        context.user_data["calibres_detalles"] = [] // Guardará los detalles de cada calibre
+        context.user_data["calibres_detalles"] = [] # Guardará los detalles de cada calibre
         context.user_data["current_calibre_idx"] = 0
 
         # Eliminar el teclado inline
