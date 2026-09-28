@@ -157,39 +157,32 @@ def _message_text(update: Update) -> str:
     return update.message.text.strip()
 
 
-def parsear_y_formatear_numero(texto: str) -> str | None:
-    """Valida si el texto es numérico y aplica formato de miles."""
-    limpio = texto.replace(" ", "").replace("$", "")
+def parsear_numero(texto: str) -> float | None:
+    """Parsea entradas numéricas en formato chileno o estándar y retorna float puro."""
+    if not texto:
+        return None
+    limpio = texto.strip().replace("$", "").replace(" ", "")
     
-    if "," in limpio and "." in limpio:
-        limpio = limpio.replace(".", "").replace(",", ".")
+    if "." in limpio and "," in limpio:
+        if limpio.rfind(",") > limpio.rfind("."):
+            limpio = limpio.replace(".", "").replace(",", ".")
+        else:
+            limpio = limpio.replace(",", "")
     elif "," in limpio:
         limpio = limpio.replace(",", ".")
+    elif "." in limpio:
+        partes = limpio.split(".")
+        if len(partes) > 2 or (len(partes) == 2 and len(partes[1]) == 3):
+            limpio = limpio.replace(".", "")
 
     try:
-        val = float(limpio)
-        if val.is_integer():
-            return f"{int(val):,}".replace(",", ".")
-        else:
-            partes = f"{val:,.2f}".split(".")
-            entera = partes[0].replace(",", ".")
-            decimal = partes[1]
-            return f"{entera},{decimal}"
+        return float(limpio)
     except ValueError:
         return None
 
 
-def convertir_a_float(valor_str: str) -> float:
-    """Convierte un string formateado con puntos de miles a float."""
-    try:
-        limpio = str(valor_str).replace(".", "").replace(",", ".")
-        return float(limpio)
-    except ValueError:
-        return 0.0
-
-
 def formatear_monto(val: float) -> str:
-    """Formatea float a representación con separador de miles."""
+    """Formatea float a string con miles (punto) y decimales (coma)."""
     if val.is_integer():
         return f"{int(val):,}".replace(",", ".")
     else:
@@ -322,17 +315,16 @@ async def ent_cantidad_entered(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para la Cantidad Entrada (ej: 50 ó 1200):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return ENT_CANTIDAD
 
-    context.user_data["cantidad"] = num_formateado
+    context.user_data["cantidad"] = formatear_monto(val_num)
     context.user_data["calibres_seleccionados"] = set()
 
     reply_markup = construir_teclado_calibres_inline(set(), "cal_")
@@ -440,17 +432,16 @@ async def ent_loop_kilos_brutos_entered(update: Update, context: ContextTypes.DE
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para Kilos Brutos (ej: 1500 ó 1500.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return ENT_LOOP_KILOS_BRUTOS
 
-    context.user_data["temp_kilos_brutos"] = num_formateado
+    context.user_data["temp_kilos_brutos"] = formatear_monto(val_num)
     idx = context.user_data.get("current_calibre_idx", 0)
     calibre_actual = context.user_data.get("calibres_queue", [])[idx]
 
@@ -466,10 +457,9 @@ async def ent_loop_tara_entered(update: Update, context: ContextTypes.DEFAULT_TY
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para Tara (ej: 20 ó 20.5):",
             reply_markup=ReplyKeyboardRemove(),
@@ -485,7 +475,7 @@ async def ent_loop_tara_entered(update: Update, context: ContextTypes.DEFAULT_TY
         "tipo_palta": context.user_data.get("temp_tipo_palta", ""),
         "categoria": context.user_data.get("temp_categoria", ""),
         "kilos_brutos": context.user_data.get("temp_kilos_brutos", ""),
-        "tara": num_formateado,
+        "tara": formatear_monto(val_num),
     }
 
     context.user_data.setdefault("calibres_detalles", []).append(detalle)
@@ -609,17 +599,16 @@ async def sal_loop_kilos_salieron_entered(update: Update, context: ContextTypes.
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para Kilos que Salieron (ej: 800 ó 800.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return SAL_LOOP_KILOS_SALIERON
 
-    context.user_data["temp_kilos_salieron"] = num_formateado
+    context.user_data["temp_kilos_salieron"] = formatear_monto(val_num)
     idx = context.user_data.get("current_calibre_idx", 0)
     calibre_actual = context.user_data.get("calibres_queue", [])[idx]
 
@@ -635,10 +624,9 @@ async def sal_loop_cajas_hechas_entered(update: Update, context: ContextTypes.DE
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para Cajas Hechas (ej: 100):",
             reply_markup=ReplyKeyboardRemove(),
@@ -654,7 +642,7 @@ async def sal_loop_cajas_hechas_entered(update: Update, context: ContextTypes.DE
         "tipo_palta": context.user_data.get("temp_tipo_palta", ""),
         "categoria": context.user_data.get("temp_categoria", ""),
         "kilos_salieron": context.user_data.get("temp_kilos_salieron", ""),
-        "cajas_hechas": num_formateado,
+        "cajas_hechas": formatear_monto(val_num),
     }
 
     context.user_data.setdefault("calibres_detalles", []).append(detalle)
@@ -728,7 +716,7 @@ async def pedir_siguiente_calibre_atributo_ven(event_or_update, context: Context
 
     if idx >= len(queue):
         detalles = context.user_data.get("calibres_detalles", [])
-        monto_total_num = sum(convertir_a_float(d.get("subtotal_num", 0)) for d in detalles)
+        monto_total_num = sum(d.get("subtotal_num", 0.0) for d in detalles)
         context.user_data["monto_total"] = formatear_monto(monto_total_num)
 
         mensaje = "💰 Selecciona el Tipo de Pago:"
@@ -787,17 +775,16 @@ async def ven_loop_kilos_vendidos_entered(update: Update, context: ContextTypes.
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para Kilos Vendidos (ej: 1500 ó 1500.5):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return VEN_LOOP_KILOS_VENDIDOS
 
-    context.user_data["temp_kilos_vendidos"] = num_formateado
+    context.user_data["temp_kilos_num"] = val_num
     idx = context.user_data.get("current_calibre_idx", 0)
     calibre_actual = context.user_data.get("calibres_queue", [])[idx]
 
@@ -813,19 +800,16 @@ async def ven_loop_precio_kilo_entered(update: Update, context: ContextTypes.DEF
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    precio_formateado = parsear_y_formatear_numero(texto)
+    precio_num = parsear_numero(_message_text(update))
 
-    if precio_formateado is None:
+    if precio_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para el Precio por Kilo (ej: 2500):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return VEN_LOOP_PRECIO_KILO
 
-    kilos_str = context.user_data.get("temp_kilos_vendidos", "0")
-    kilos_num = convertir_a_float(kilos_str)
-    precio_num = convertir_a_float(precio_formateado)
+    kilos_num = context.user_data.get("temp_kilos_num", 0.0)
     subtotal = kilos_num * precio_num
 
     idx = context.user_data.get("current_calibre_idx", 0)
@@ -836,8 +820,8 @@ async def ven_loop_precio_kilo_entered(update: Update, context: ContextTypes.DEF
         "calibre": calibre_actual,
         "tipo_palta": context.user_data.get("temp_tipo_palta", ""),
         "categoria": context.user_data.get("temp_categoria", ""),
-        "kilos_vendidos": kilos_str,
-        "precio_kilo": precio_formateado,
+        "kilos_vendidos": formatear_monto(kilos_num),
+        "precio_kilo": formatear_monto(precio_num),
         "subtotal_num": subtotal,
         "subtotal_venta": formatear_monto(subtotal),
     }
@@ -869,17 +853,16 @@ async def ven_monto_pagado_entered(update: Update, context: ContextTypes.DEFAULT
     if update.message is None:
         return ConversationHandler.END
 
-    texto = _message_text(update)
-    num_formateado = parsear_y_formatear_numero(texto)
+    val_num = parsear_numero(_message_text(update))
 
-    if num_formateado is None:
+    if val_num is None:
         await update.message.reply_text(
             "⚠️ Por favor ingresa un valor numérico válido para el Monto Pagado (ej: 250000):",
             reply_markup=ReplyKeyboardRemove(),
         )
         return VEN_MONTO_PAGADO
 
-    context.user_data["monto_pagado"] = num_formateado
+    context.user_data["monto_pagado"] = formatear_monto(val_num)
     return await mostrar_resumen_previo(update, context)
 
 
